@@ -4,6 +4,8 @@ Name: archipro-silverstripe-smart-enum
 SilverStripe\Core\Injector\Injector:
   SmartEnum:
     class: ArchiPro\Silverstripe\SmartEnum\DBSmartEnum
+  DBSmartEnum:
+    class: ArchiPro\Silverstripe\SmartEnum\DBSmartEnum
 
 SilverStripe\ORM\DataObject:
   extensions:

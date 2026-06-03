@@ -1,3 +1,9 @@
 parameters:
   paths:
     - src
+    - tests
+  ignoreErrors:
+    # Unit tests construct DB fields directly; Injector::create() needs a full SS bootstrap.
+    -
+      identifier: silverstan.injectable.useCreate
+      path: tests/php/*

@@ -2,13 +2,15 @@
 
 namespace ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures;
 
+use ArchiPro\Silverstripe\SmartEnum\DBSmartEnum;
 use ArchiPro\Silverstripe\SmartEnum\SmartEnumDataExtension;
+use SilverStripe\Dev\TestOnly;
 use SilverStripe\ORM\DataObject;
 
 /**
  * Minimal DataObject exercising SmartEnum fields in tests.
  */
-class SmartEnumTestItem extends DataObject
+class SmartEnumTestItem extends DataObject implements TestOnly
 {
     /**
      * @config
@@ -26,7 +28,10 @@ class SmartEnumTestItem extends DataObject
      * @config
      */
     private static array $db = [
-        'Color' => 'DBSmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor", "red")',
-        'ColorAsVarchar' => 'DBSmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor", "red", ["storage" => "varchar"])',
+        'Color' => DBSmartEnum::class
+            . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor", "red")',
+        'ColorAsVarchar' => DBSmartEnum::class
+            . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor", "red", '
+            . '["storage" => "varchar"])',
     ];
 }

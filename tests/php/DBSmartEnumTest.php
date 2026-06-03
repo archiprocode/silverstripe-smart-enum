@@ -12,7 +12,6 @@ use PHPUnit\Framework\TestCase;
  */
 class DBSmartEnumTest extends TestCase
 {
-
     public function testConstructor(): void
     {
         $dbField = new DBSmartEnum(
@@ -34,17 +33,17 @@ class DBSmartEnumTest extends TestCase
         );
         $this->assertSame('Status', $dbField->getName(), 'Field name was set correctly');
         $this->assertSame(['foo' => 'bar'], $dbField->getOptions(), 'Options are set correctly');
-        $this->assertSame(TestColor::class, $dbField->getEnumClass());
-        $this->assertSame('enum', $dbField->getStorage());
+        $this->assertSame(TestColor::class, $dbField->getEnumClass(), 'BackedEnum class name is retained on the field');
+        $this->assertSame('enum', $dbField->getStorage(), 'Default physical storage is MySQL ENUM');
     }
 
     public function testConstructorAcceptsNullEnumClass(): void
     {
         $dbField = new DBSmartEnum('Status');
 
-        $this->assertSame('Status', $dbField->getName());
-        $this->assertSame([], $dbField->getEnum());
-        $this->assertNull($dbField->getEnumClass());
+        $this->assertSame('Status', $dbField->getName(), 'Field name is set when enum class is omitted');
+        $this->assertSame([], $dbField->getEnum(), 'No enum values when enum class is omitted');
+        $this->assertNull($dbField->getEnumClass(), 'Enum class remains null when not configured');
     }
 
     public function testConstructorThrowsWhenEnumClassCannotBeResolved(): void
@@ -65,22 +64,94 @@ class DBSmartEnumTest extends TestCase
         new DBSmartEnum('Status', UnitOnlyEnum::class);
     }
 
-    public function testStorageFromOptions(): void
+    /**
+     * @return array<string, array{0: array<string, mixed>, 1: string, 2?: int}>
+     */
+    public function storageFromOptionsProvider(): array
     {
-        $dbField = new DBSmartEnum('Color', TestColor::class, TestColor::Red->value, [
-            'storage' => 'varchar',
-            'varchar_length' => 32,
-        ]);
-
-        $this->assertSame('varchar', $dbField->getStorage());
-        $this->assertSame(32, $dbField->getVarcharLength());
-        $this->assertArrayNotHasKey('storage', $dbField->getOptions());
-        $this->assertArrayNotHasKey('varchar_length', $dbField->getOptions());
+        return [
+            'default enum storage' => [
+                [],
+                'enum',
+            ],
+            'varchar without explicit length' => [
+                ['storage' => 'varchar'],
+                'varchar',
+            ],
+            'varchar with explicit length' => [
+                ['storage' => 'varchar', 'varchar_length' => 32],
+                'varchar',
+                32,
+            ],
+        ];
     }
 
-    public function testEnumValuesMatchBackingCasesForCmsDropdown(): void
+    /**
+     * @dataProvider storageFromOptionsProvider
+     * @param array<string, mixed> $options
+     */
+    public function testResolvesStorageFromOptions(
+        array $options,
+        string $expectedStorage,
+        ?int $expectedLength = null
+    ): void {
+        $dbField = new DBSmartEnum('Color', TestColor::class, TestColor::Red->value, $options);
+
+        $this->assertSame(
+            $expectedStorage,
+            $dbField->getStorage(),
+            'Physical storage matches field spec options'
+        );
+
+        if ($expectedStorage !== 'varchar') {
+            return;
+        }
+
+        if ($expectedLength !== null) {
+            $this->assertSame(
+                $expectedLength,
+                $dbField->getVarcharLength(),
+                'VARCHAR length respects explicit varchar_length option'
+            );
+            $this->assertArrayNotHasKey(
+                'storage',
+                $dbField->getOptions(),
+                'storage is consumed and not passed to parent DBEnum'
+            );
+            $this->assertArrayNotHasKey(
+                'varchar_length',
+                $dbField->getOptions(),
+                'varchar_length is consumed and not passed to parent DBEnum'
+            );
+
+            return;
+        }
+
+        $this->assertGreaterThanOrEqual(
+            3,
+            $dbField->getVarcharLength(),
+            'VARCHAR length defaults from longest backing value when varchar_length is omitted'
+        );
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: array<string, mixed>}>
+     */
+    public function enumValuesStorageProvider(): array
     {
-        $dbField = new DBSmartEnum('Color', TestColor::class, TestColor::Red->value);
+        return [
+            'enum storage' => ['enum', []],
+            'varchar storage' => ['varchar', ['storage' => 'varchar']],
+        ];
+    }
+
+    /**
+     * @dataProvider enumValuesStorageProvider
+     * @param array<string, mixed> $options
+     */
+    public function testEnumValuesForCmsDropdown(string $storageLabel, array $options): void
+    {
+        $dbField = new DBSmartEnum('Color', TestColor::class, TestColor::Red->value, $options);
 
         $this->assertSame(
             [
@@ -88,41 +159,10 @@ class DBSmartEnumTest extends TestCase
                 TestColor::Blue->value => TestColor::Blue->value,
             ],
             $dbField->enumValues(false),
-            'DBEnum::formField() builds DropdownField options from enumValues()'
+            sprintf(
+                'CMS dropdown options stay backing-value keyed when physical storage is %s',
+                $storageLabel
+            )
         );
-    }
-
-    public function testEnumValuesUnchangedForVarcharStorage(): void
-    {
-        $dbField = new DBSmartEnum('Color', TestColor::class, TestColor::Red->value, ['storage' => 'varchar']);
-
-        $this->assertSame(
-            [
-                TestColor::Red->value => TestColor::Red->value,
-                TestColor::Blue->value => TestColor::Blue->value,
-            ],
-            $dbField->enumValues(false),
-            'VARCHAR storage affects DDL only; CMS dropdown options stay enum-backed'
-        );
-    }
-
-    public function testDefaultFieldSpecUsesEnumStorage(): void
-    {
-        $field = new DBSmartEnum('Color', TestColor::class, TestColor::Red->value);
-
-        $this->assertSame('enum', $field->getStorage());
-    }
-
-    public function testFieldSpecCanRequestVarcharStorage(): void
-    {
-        $field = new DBSmartEnum(
-            'ColorAsVarchar',
-            TestColor::class,
-            TestColor::Red->value,
-            ['storage' => 'varchar']
-        );
-
-        $this->assertSame('varchar', $field->getStorage());
-        $this->assertGreaterThanOrEqual(3, $field->getVarcharLength());
     }
 }

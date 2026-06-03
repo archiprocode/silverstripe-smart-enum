@@ -22,21 +22,11 @@ class DBSmartEnum extends DBEnum
     use Configurable;
 
     /**
-     * Global default physical storage when not overridden per field or per enum class.
+     * Global default physical storage when not overridden per field in constructor options.
      *
      * @config
      */
     private static string $default_storage = 'enum';
-
-    /**
-     * Per-PHP-enum-class storage overrides. Values may be `enum`, `varchar`, or a map with
-     * `storage` and optional `varchar_length` keys.
-     *
-     * @config
-     *
-     * @var array<string, string|array{storage?: string, varchar_length?: int}>
-     */
-    private static array $enum_storage = [];
 
     /**
      * Fully-qualified BackedEnum class name, when known.
@@ -77,7 +67,10 @@ class DBSmartEnum extends DBEnum
         if ($enumClass) {
             if (!enum_exists($enumClass)) {
                 throw new \RuntimeException(sprintf(
-                    'DBSmartEnum: enum class "%s" could not be resolved. This usually indicates an autoload race in a forked test worker. Failing fast here so the schema build does not silently drop the column while keeping its index.',
+                    'DBSmartEnum: enum class "%s" could not be resolved. '
+                    . 'This usually indicates an autoload race in a forked test worker. '
+                    . 'Failing fast here so the schema build does not silently drop the column '
+                    . 'while keeping its index.',
                     $enumClass
                 ));
             }
@@ -86,7 +79,8 @@ class DBSmartEnum extends DBEnum
 
             if (!$enumReflection->isBacked()) {
                 throw new \RuntimeException(sprintf(
-                    'DBSmartEnum: enum class "%s" is not a BackedEnum. DBEnum requires scalar values to persist, so only BackedEnums are supported.',
+                    'DBSmartEnum: enum class "%s" is not a BackedEnum. '
+                    . 'DBEnum requires scalar values to persist, so only BackedEnums are supported.',
                     $enumClass
                 ));
             }
@@ -97,8 +91,8 @@ class DBSmartEnum extends DBEnum
             );
         }
 
-        $this->storage = $this->resolveStorage($this->enumClass, $options);
-        $this->varcharLength = $this->resolveVarcharLength($values ?? [], $options, $this->enumClass);
+        $this->storage = $this->resolveStorage($options);
+        $this->varcharLength = $this->resolveVarcharLength($values ?? [], $options);
 
         $parentOptions = $options;
         unset($parentOptions['storage'], $parentOptions['varchar_length']);
@@ -161,26 +155,13 @@ class DBSmartEnum extends DBEnum
     /**
      * @param array<string, mixed> $options
      */
-    private function resolveStorage(?string $enumClass, array $options): string
+    private function resolveStorage(array $options): string
     {
         if (isset($options['storage'])) {
             return $this->normaliseStorage((string) $options['storage']);
         }
 
-        if ($enumClass) {
-            $enumStorage = $this->getConfigValue('enum_storage', []);
-            if (isset($enumStorage[$enumClass])) {
-                $entry = $enumStorage[$enumClass];
-                if (is_array($entry) && isset($entry['storage'])) {
-                    return $this->normaliseStorage((string) $entry['storage']);
-                }
-                if (is_string($entry)) {
-                    return $this->normaliseStorage($entry);
-                }
-            }
-        }
-
-        $default = $this->getConfigValue('default_storage', static::$default_storage);
+        $default = $this->getConfigValue('default_storage', 'enum');
 
         return $this->normaliseStorage((string) $default);
     }
@@ -189,20 +170,10 @@ class DBSmartEnum extends DBEnum
      * @param list<int|string>|null $backingValues
      * @param array<string, mixed> $options
      */
-    private function resolveVarcharLength(?array $backingValues, array $options, ?string $enumClass): int
+    private function resolveVarcharLength(?array $backingValues, array $options): int
     {
         if (isset($options['varchar_length'])) {
             return $this->clampVarcharLength((int) $options['varchar_length']);
-        }
-
-        if ($enumClass) {
-            $enumStorage = $this->getConfigValue('enum_storage', []);
-            if (isset($enumStorage[$enumClass]) && is_array($enumStorage[$enumClass])) {
-                $length = $enumStorage[$enumClass]['varchar_length'] ?? null;
-                if ($length !== null) {
-                    return $this->clampVarcharLength((int) $length);
-                }
-            }
         }
 
         $maxLen = 0;
