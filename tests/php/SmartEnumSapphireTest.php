@@ -35,6 +35,7 @@ abstract class SmartEnumSapphireTest extends SapphireTest
             || str_contains($message, 'Connection refused')
             || str_contains($message, 'Unknown database')
             || str_contains($message, 'activate() on bool')
+            || str_contains($message, 'activate() on false')
             || str_contains($message, 'mysqli object is not fully initialized');
     }
 
