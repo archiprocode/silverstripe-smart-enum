@@ -85,24 +85,19 @@ Per-field override in the field spec options (4th argument):
 
 `varchar_length` is optional; when omitted, the length is `max(50, longest backing value length)` capped at 255.
 
-### YAML / Injector configuration
+### YAML / site-wide default
 
-For enums shared across many models, configure storage via static config instead of repeating options in every `$db` entry:
+Per-field storage must be set in the field spec options (4th argument) as shown above. To change the default for all SmartEnum fields that do not pass `storage` in their options, use static config:
 
 ```yaml
 ---
 Name: my-smartenum-storage
 ---
 ArchiPro\Silverstripe\SmartEnum\DBSmartEnum:
-  default_storage: enum
-  enum_storage:
-    'My\\Namespace\\HeavyStatus': varchar
-    'My\\Namespace\\OtherStatus':
-      storage: varchar
-      varchar_length: 32
+  default_storage: enum   # or varchar
 ```
 
-`enum_storage` keys must be the fully-qualified PHP enum class name (single backslashes in YAML).
+Previously documented `enum_storage` (per PHP enum class) is removed; move those overrides into each `$db` field spec.
 
 ## Typed accessors (optional)
 
@@ -126,12 +121,14 @@ Changing storage on a live, large table is an operational task. `dev/build` may 
 ## Running tests
 
 ```bash
-cd packages/silverstripe-smart-enum
 composer install
-vendor/bin/phpunit
+composer test
+composer phpstan
+composer lint      # PHPCS (PSR-12)
+composer check     # phpstan, lint, and test in sequence
 ```
 
-Requires a MySQL-compatible database configured the same way as Silverstripe core’s PHPUnit bootstrap (see `vendor/silverstripe/framework/tests/bootstrap/environment.php`).
+PHPUnit requires a MySQL-compatible database for persistence tests (`SmartEnumPersistenceTest`). Configure connection via a project `.env` file or `SS_DATABASE_*` environment variables (for example `SS_DATABASE_SERVER`, `SS_DATABASE_USERNAME`, `SS_DATABASE_PASSWORD`, and optionally `SS_DATABASE_CHOOSE_NAME=true`). GitHub Actions sets these automatically via [silverstripe/gha-ci](https://github.com/silverstripe/gha-ci).
 
 ## License
 

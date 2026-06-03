@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ci:
+    name: CI
+    permissions:
+      pull-requests: read
+      contents: read
+      actions: write
+    uses: silverstripe/gha-ci/.github/workflows/ci.yml@v1
+    with:
+      dynamic_matrix: false
+      js: false
+      endtoend: false
+      doclinting: false
+      extra_jobs: |
+        - php: '8.1'
+          db: mysql80
+          phpunit: true
+          installer_version: ^4
+        - php: '8.2'
+          db: mysql80
+          phpunit: true
+          installer_version: ^5
+        - php: '8.2'
+          db: mariadb
+          phpunit: true
+          installer_version: ^5
+        - php: '8.3'
+          db: mysql80
+          phpunit: true
+          installer_version: ^5
+        - php: '8.3'
+          db: mariadb
+          phpunit: true
+          installer_version: ^5
