@@ -4,12 +4,18 @@ namespace ArchiPro\Silverstripe\SmartEnum\Tests;
 
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\SmartEnumTestItem;
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestColor;
+use SilverStripe\Dev\SapphireTest;
 
 /**
  * @internal
  */
-class SmartEnumDataExtensionTest extends SmartEnumSapphireTest
+class SmartEnumDataExtensionTest extends SapphireTest
 {
+    /**
+     * Test classes live under tests/php and are not in the Silverstripe class manifest.
+     */
+    protected bool $doSetSupportedModuleLocaleToUS = false;
+
     protected $usesDatabase = false;
 
     public function testGetterReturnsEnumInstance(): void

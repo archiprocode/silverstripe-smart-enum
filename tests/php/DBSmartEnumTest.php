@@ -5,13 +5,20 @@ namespace ArchiPro\Silverstripe\SmartEnum\Tests;
 use ArchiPro\Silverstripe\SmartEnum\DBSmartEnum;
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestColor;
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\UnitOnlyEnum;
-use PHPUnit\Framework\TestCase;
+use SilverStripe\Dev\SapphireTest;
 
 /**
  * @internal
  */
-class DBSmartEnumTest extends TestCase
+class DBSmartEnumTest extends SapphireTest
 {
+    /**
+     * Test classes live under tests/php and are not in the Silverstripe class manifest.
+     */
+    protected bool $doSetSupportedModuleLocaleToUS = false;
+
+    protected $usesDatabase = false;
+
     public function testConstructor(): void
     {
         $dbField = new DBSmartEnum(

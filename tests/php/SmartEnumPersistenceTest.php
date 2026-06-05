@@ -4,12 +4,18 @@ namespace ArchiPro\Silverstripe\SmartEnum\Tests;
 
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\SmartEnumTestItem;
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestColor;
+use SilverStripe\Dev\SapphireTest;
 
 /**
  * @internal
  */
-class SmartEnumPersistenceTest extends SmartEnumSapphireTest
+class SmartEnumPersistenceTest extends SapphireTest
 {
+    /**
+     * Test classes live under tests/php and are not in the Silverstripe class manifest.
+     */
+    protected bool $doSetSupportedModuleLocaleToUS = false;
+
     /**
      * @var array<int, class-string<SmartEnumTestItem>>
      */
@@ -25,17 +31,6 @@ class SmartEnumPersistenceTest extends SmartEnumSapphireTest
     protected static $fixture_file = [];
 
     protected $usesDatabase = true;
-
-    protected function setUp(): void
-    {
-        if (!static::isTestDatabaseReachable()) {
-            $this->markTestSkipped(
-                'MySQL is not configured or not reachable; skipping SmartEnum persistence tests.'
-            );
-        }
-
-        parent::setUp();
-    }
 
     public function testFixtureDefaultsToRed(): void
     {

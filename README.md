@@ -128,7 +128,7 @@ composer lint      # PHPCS (PSR-12)
 composer check     # phpstan, lint, and test in sequence
 ```
 
-PHPUnit requires a MySQL-compatible database for persistence tests (`SmartEnumPersistenceTest`). Configure connection via a project `.env` file or `SS_DATABASE_*` environment variables (for example `SS_DATABASE_SERVER`, `SS_DATABASE_USERNAME`, `SS_DATABASE_PASSWORD`, and optionally `SS_DATABASE_CHOOSE_NAME=true`). GitHub Actions sets these automatically via [silverstripe/gha-ci](https://github.com/silverstripe/gha-ci).
+`composer test` requires a reachable MySQL-compatible database. Configure the connection via a project `.env` file or `SS_DATABASE_*` environment variables (for example `SS_DATABASE_SERVER`, `SS_DATABASE_USERNAME`, `SS_DATABASE_PASSWORD`, and optionally `SS_DATABASE_CHOOSE_NAME=true`). The suite fails if the database is missing or unreachable. GitHub Actions sets these automatically via [silverstripe/gha-ci](https://github.com/silverstripe/gha-ci).
 
 ## License
 
