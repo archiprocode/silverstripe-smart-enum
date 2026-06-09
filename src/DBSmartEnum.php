@@ -31,6 +31,8 @@ class DBSmartEnum extends DBEnum
 
     /**
      * Fully-qualified BackedEnum class name, when known.
+     *
+     * @var class-string<BackedEnum>|null
      */
     protected ?string $enumClass = null;
 
@@ -51,7 +53,7 @@ class DBSmartEnum extends DBEnum
 
     /**
      * @param string|null $name      Field name passed through to {@see DBEnum::__construct}
-     * @param string|null $enumClass Fully-qualified PHP enum class name. May be null because Silverstripe
+     * @param class-string<BackedEnum>|null $enumClass Fully-qualified PHP enum class name. May be null because Silverstripe
      *                               instantiates DBField subclasses with null arguments while inspecting types
      *                               (see {@see \SilverStripe\ORM\DataObject::dbObject()}); we must tolerate that
      *                               and pass through to the parent unchanged.
@@ -120,6 +122,8 @@ class DBSmartEnum extends DBEnum
 
     /**
      * BackedEnum class backing this field, or null when not configured.
+     *
+     * @return class-string<BackedEnum>|null
      */
     public function getEnumClass(): ?string
     {
@@ -212,6 +216,7 @@ class DBSmartEnum extends DBEnum
     /**
      * Normalise and validate the field default against the backing enum.
      *
+     * @param class-string<BackedEnum>|null $enumClass
      * @param list<int|string> $values
      *
      * @throws \InvalidArgumentException When a non-null default is not a case or backing scalar on $enumClass.

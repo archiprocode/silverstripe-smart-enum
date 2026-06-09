@@ -4,7 +4,6 @@ namespace ArchiPro\Silverstripe\SmartEnum;
 
 use BackedEnum;
 use SilverStripe\ORM\DataExtension;
-use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DataObjectSchema;
 
 /**
@@ -55,7 +54,6 @@ class SmartEnumDataExtension extends DataExtension
      */
     private function readEnum(string $field): ?BackedEnum
     {
-        /** @var DataObject $owner */
         $owner = $this->getOwner();
         $enumClass = $this->getEnumClassForField($field);
         if ($enumClass === null) {
@@ -73,16 +71,17 @@ class SmartEnumDataExtension extends DataExtension
             return null;
         }
 
-        /** @var class-string<BackedEnum> $enumClass */
         return $enumClass::tryFrom($value);
     }
 
     /**
      * Coerce DB values to the enum backing type (e.g. MySQL ENUM returns stringified ints).
+     *
+     * @param class-string<BackedEnum> $enumClass
      */
     private function normaliseStoredValue(mixed $value, string $field, string $enumClass): int|string|null
     {
-        if ($this->getBackingTypeForField($field, $enumClass) !== 'int') {
+        if ($this->getBackingTypeForField($field) !== 'int') {
             return is_string($value) || is_int($value) ? $value : null;
         }
 
@@ -100,23 +99,14 @@ class SmartEnumDataExtension extends DataExtension
     /**
      * Backing scalar type for the field's enum: `string` or `int`.
      */
-    private function getBackingTypeForField(string $field, string $enumClass): string
+    private function getBackingTypeForField(string $field): string
     {
-        /** @var DataObject $owner */
-        $owner = $this->getOwner();
-
-        try {
-            $dbObject = $owner->dbObject($field);
-            if ($dbObject instanceof DBSmartEnum) {
-                return $dbObject->getBackingType();
-            }
-        } catch (\Throwable) {
-            // Fall through to reflection when the database is unavailable.
+        $dbObject = $this->getOwner()->dbObject($field);
+        if ($dbObject instanceof DBSmartEnum) {
+            return $dbObject->getBackingType();
         }
 
-        $reflection = new \ReflectionEnum($enumClass);
-
-        return $reflection->getBackingType()->getName();
+        return 'string';
     }
 
     /**
@@ -127,7 +117,6 @@ class SmartEnumDataExtension extends DataExtension
      */
     private function writeEnum(string $field, mixed $value): static
     {
-        /** @var DataObject $owner */
         $owner = $this->getOwner();
 
         if ($value instanceof BackedEnum) {
@@ -154,7 +143,6 @@ class SmartEnumDataExtension extends DataExtension
      */
     private function getSmartEnumFieldNames(): array
     {
-        /** @var DataObject $owner */
         $owner = $this->getOwner();
         $fields = DataObjectSchema::create()->databaseFields(get_class($owner), false);
 
@@ -176,32 +164,16 @@ class SmartEnumDataExtension extends DataExtension
      */
     private function getEnumClassForField(string $field): ?string
     {
-        /** @var DataObject $owner */
-        $owner = $this->getOwner();
-
-        try {
-            $dbObject = $owner->dbObject($field);
-            if ($dbObject instanceof DBSmartEnum) {
-                $enumClass = $dbObject->getEnumClass();
-                if ($enumClass !== null && is_subclass_of($enumClass, BackedEnum::class)) {
-                    return $enumClass;
-                }
-            }
-        } catch (\Throwable) {
-            // Fall through to schema parsing when the database is unavailable (e.g. unit tests).
-        }
-
-        $fieldSpec = DataObjectSchema::create()->databaseField(get_class($owner), $field, false);
-        if (!is_string($fieldSpec)) {
+        $dbObject = $this->getOwner()->dbObject($field);
+        if (!$dbObject instanceof DBSmartEnum) {
             return null;
         }
 
-        if (!preg_match('/(?:DB)?SmartEnum\("((?:[^"\\\\]|\\\\.)+)"/', $fieldSpec, $matches)) {
-            return null;
+        $enumClass = $dbObject->getEnumClass();
+        if ($enumClass !== null && is_subclass_of($enumClass, BackedEnum::class)) {
+            return $enumClass;
         }
 
-        $enumClass = stripcslashes($matches[1]);
-
-        return is_subclass_of($enumClass, BackedEnum::class) ? $enumClass : null;
+        return null;
     }
 }
