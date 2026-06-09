@@ -4,6 +4,7 @@ namespace ArchiPro\Silverstripe\SmartEnum\Tests;
 
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\SmartEnumTestItem;
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestColor;
+use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestPriority;
 use SilverStripe\Dev\SapphireTest;
 
 /**
@@ -68,6 +69,29 @@ class SmartEnumPersistenceTest extends SapphireTest
             $reloaded->getColorAsVarchar(),
             'New records default ColorAsVarchar to the red enum case from the field spec'
         );
+        $this->assertSame(
+            TestPriority::Low,
+            $reloaded->getPriority(),
+            'New records default Priority to the low enum case from the int field spec'
+        );
+        $this->assertSame(
+            TestPriority::High,
+            $reloaded->getPriorityScalar(),
+            'New records default PriorityScalar to the high enum case from the int scalar field spec'
+        );
+    }
+
+    public function testIntScalarWithoutDefaultReturnsNullFromGetter(): void
+    {
+        $item = SmartEnumTestItem::create();
+        $item->write();
+
+        $reloaded = SmartEnumTestItem::get()->byID($item->ID);
+
+        $this->assertNull(
+            $reloaded->getPriorityNoDefault(),
+            'Unset int scalar column returns null from getter when 0 is not a valid case'
+        );
     }
 
     /**
@@ -115,6 +139,61 @@ class SmartEnumPersistenceTest extends SapphireTest
             $color->value,
             $reloaded->getField($field),
             sprintf('Reloaded %s column holds the backing scalar in the database', $field)
+        );
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: string, 2: TestPriority, 3: bool}>
+     */
+    public function intRoundTripProvider(): array
+    {
+        return [
+            'Priority via typed setter' => ['Priority', 'setter', TestPriority::High, false],
+            'Priority via scalar property' => ['Priority', 'property', TestPriority::High, false],
+            'PriorityScalar via typed setter' => ['PriorityScalar', 'setter', TestPriority::Low, true],
+            'PriorityScalar via scalar property' => ['PriorityScalar', 'property', TestPriority::Low, true],
+        ];
+    }
+
+    /**
+     * @dataProvider intRoundTripProvider
+     */
+    public function testIntSmartEnumRoundTripsThroughDatabase(
+        string $field,
+        string $writeApi,
+        TestPriority $priority,
+        bool $strictScalarType
+    ): void {
+        $item = SmartEnumTestItem::create();
+
+        if ($writeApi === 'setter') {
+            $setter = 'set' . $field;
+            $item->$setter($priority);
+        } else {
+            $item->$field = $priority->value;
+        }
+
+        $writeResult = $item->write();
+        $this->assertNotFalse(
+            $writeResult,
+            sprintf('%s value was persisted to the database', $field)
+        );
+
+        $reloaded = SmartEnumTestItem::get()->byID($item->ID);
+        $getter = 'get' . $field;
+
+        $this->assertSame(
+            $priority,
+            $reloaded->$getter(),
+            sprintf('Reloaded record returns %s via %s()', $priority->name, $getter)
+        );
+
+        $stored = $reloaded->getField($field);
+        $columnLabel = $strictScalarType ? 'INT' : 'ENUM';
+        $this->assertEquals(
+            $priority->value,
+            $stored,
+            sprintf('Reloaded %s %s column holds the backing scalar (may be stringified)', $field, $columnLabel)
         );
     }
 }

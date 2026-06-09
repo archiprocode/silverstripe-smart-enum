@@ -4,6 +4,7 @@ namespace ArchiPro\Silverstripe\SmartEnum\Tests;
 
 use ArchiPro\Silverstripe\SmartEnum\DBSmartEnum;
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestColor;
+use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestPriority;
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestSize;
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\UnitOnlyEnum;
 use SilverStripe\Dev\SapphireTest;
@@ -42,7 +43,9 @@ class DBSmartEnumTest extends SapphireTest
         $this->assertSame('Status', $dbField->getName(), 'Field name was set correctly');
         $this->assertSame(['foo' => 'bar'], $dbField->getOptions(), 'Options are set correctly');
         $this->assertSame(TestColor::class, $dbField->getEnumClass(), 'BackedEnum class name is retained on the field');
-        $this->assertSame('enum', $dbField->getStorage(), 'Default physical storage is MySQL ENUM');
+        $this->assertSame('enum', $dbField->getStorage(), 'Default logical storage is MySQL ENUM');
+        $this->assertSame('enum', $dbField->getColumnType(), 'Default column type is MySQL ENUM');
+        $this->assertSame('string', $dbField->getBackingType(), 'String-backed enum reports string backing type');
     }
 
     public function testConstructorAcceptsNullEnumClass(): void
@@ -129,7 +132,7 @@ class DBSmartEnumTest extends SapphireTest
     }
 
     /**
-     * @return array<string, array{0: array<string, mixed>, 1: string, 2?: int}>
+     * @return array<string, array{0: array<string, mixed>, 1: string, 2: string, 3?: int}>
      */
     public function storageFromOptionsProvider(): array
     {
@@ -137,13 +140,21 @@ class DBSmartEnumTest extends SapphireTest
             'default enum storage' => [
                 [],
                 'enum',
+                'enum',
             ],
-            'varchar without explicit length' => [
-                ['storage' => 'varchar'],
+            'scalar without explicit length' => [
+                ['storage' => 'scalar'],
+                'scalar',
                 'varchar',
             ],
-            'varchar with explicit length' => [
-                ['storage' => 'varchar', 'varchar_length' => 32],
+            'varchar alias without explicit length' => [
+                ['storage' => 'varchar'],
+                'scalar',
+                'varchar',
+            ],
+            'scalar with explicit length' => [
+                ['storage' => 'scalar', 'varchar_length' => 32],
+                'scalar',
                 'varchar',
                 32,
             ],
@@ -157,6 +168,7 @@ class DBSmartEnumTest extends SapphireTest
     public function testResolvesStorageFromOptions(
         array $options,
         string $expectedStorage,
+        string $expectedColumnType,
         ?int $expectedLength = null
     ): void {
         $dbField = new DBSmartEnum('Color', TestColor::class, TestColor::Red->value, $options);
@@ -164,10 +176,15 @@ class DBSmartEnumTest extends SapphireTest
         $this->assertSame(
             $expectedStorage,
             $dbField->getStorage(),
-            'Physical storage matches field spec options'
+            'Logical storage matches field spec options'
+        );
+        $this->assertSame(
+            $expectedColumnType,
+            $dbField->getColumnType(),
+            'Physical column type matches field spec options'
         );
 
-        if ($expectedStorage !== 'varchar') {
+        if ($expectedColumnType !== 'varchar') {
             return;
         }
 
@@ -205,7 +222,7 @@ class DBSmartEnumTest extends SapphireTest
     {
         return [
             'enum storage' => ['enum', []],
-            'varchar storage' => ['varchar', ['storage' => 'varchar']],
+            'scalar storage' => ['scalar', ['storage' => 'scalar']],
         ];
     }
 
@@ -227,6 +244,80 @@ class DBSmartEnumTest extends SapphireTest
                 'CMS dropdown options stay backing-value keyed when physical storage is %s',
                 $storageLabel
             )
+        );
+    }
+
+    public function testIntBackedEnumConstructor(): void
+    {
+        $dbField = new DBSmartEnum('Priority', TestPriority::class, 1);
+
+        $this->assertSame(
+            [TestPriority::Low->value, TestPriority::High->value],
+            $dbField->getEnum(),
+            'Int backing values are read from the enum cases'
+        );
+        $this->assertSame(1, $dbField->getDefault(), 'Int default is set correctly');
+        $this->assertSame('int', $dbField->getBackingType(), 'Int-backed enum reports int backing type');
+        $this->assertSame('enum', $dbField->getStorage(), 'Default logical storage is enum');
+        $this->assertSame('enum', $dbField->getColumnType(), 'Default column type is MySQL ENUM for int-backed enum');
+    }
+
+    public function testIntBackedEnumAcceptsEnumCaseAsDefault(): void
+    {
+        $dbField = new DBSmartEnum('Priority', TestPriority::class, TestPriority::Low);
+
+        $this->assertSame(
+            TestPriority::Low->value,
+            $dbField->getDefault(),
+            'Enum case default is normalised to the int backing scalar'
+        );
+    }
+
+    public function testIntBackedEnumRejectsInvalidIntDefault(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('does not match any case');
+
+        new DBSmartEnum('Priority', TestPriority::class, 2);
+    }
+
+    public function testIntBackedEnumScalarStorageUsesIntColumn(): void
+    {
+        $dbField = new DBSmartEnum(
+            'Priority',
+            TestPriority::class,
+            TestPriority::High->value,
+            ['storage' => 'scalar']
+        );
+
+        $this->assertSame('scalar', $dbField->getStorage(), 'Scalar logical storage is configured');
+        $this->assertSame('int', $dbField->getColumnType(), 'Int-backed scalar storage maps to INT column');
+    }
+
+    public function testIntBackedEnumVarcharAliasUsesIntColumn(): void
+    {
+        $dbField = new DBSmartEnum(
+            'Priority',
+            TestPriority::class,
+            TestPriority::High->value,
+            ['storage' => 'varchar']
+        );
+
+        $this->assertSame('scalar', $dbField->getStorage(), 'varchar alias normalises to scalar');
+        $this->assertSame('int', $dbField->getColumnType(), 'Int-backed varchar alias still maps to INT column');
+    }
+
+    public function testIntBackedEnumValuesForCmsDropdown(): void
+    {
+        $dbField = new DBSmartEnum('Priority', TestPriority::class, 1);
+
+        $this->assertSame(
+            [
+                TestPriority::Low->value => TestPriority::Low->value,
+                TestPriority::High->value => TestPriority::High->value,
+            ],
+            $dbField->enumValues(false),
+            'CMS dropdown options stay int backing-value keyed'
         );
     }
 }

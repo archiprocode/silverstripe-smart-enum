@@ -67,8 +67,56 @@ class SmartEnumDataExtension extends DataExtension
             return null;
         }
 
+        $value = $this->normaliseStoredValue($value, $field, $enumClass);
+
+        if ($value === null) {
+            return null;
+        }
+
         /** @var class-string<BackedEnum> $enumClass */
         return $enumClass::tryFrom($value);
+    }
+
+    /**
+     * Coerce DB values to the enum backing type (e.g. MySQL ENUM returns stringified ints).
+     */
+    private function normaliseStoredValue(mixed $value, string $field, string $enumClass): int|string|null
+    {
+        if ($this->getBackingTypeForField($field, $enumClass) !== 'int') {
+            return is_string($value) || is_int($value) ? $value : null;
+        }
+
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (is_string($value) && is_numeric($value)) {
+            return (int) $value;
+        }
+
+        return null;
+    }
+
+    /**
+     * Backing scalar type for the field's enum: `string` or `int`.
+     */
+    private function getBackingTypeForField(string $field, string $enumClass): string
+    {
+        /** @var DataObject $owner */
+        $owner = $this->getOwner();
+
+        try {
+            $dbObject = $owner->dbObject($field);
+            if ($dbObject instanceof DBSmartEnum) {
+                return $dbObject->getBackingType();
+            }
+        } catch (\Throwable) {
+            // Fall through to reflection when the database is unavailable.
+        }
+
+        $reflection = new \ReflectionEnum($enumClass);
+
+        return $reflection->getBackingType()->getName();
     }
 
     /**

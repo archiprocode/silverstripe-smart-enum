@@ -4,6 +4,7 @@ namespace ArchiPro\Silverstripe\SmartEnum\Tests;
 
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\SmartEnumTestItem;
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestColor;
+use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestPriority;
 use SilverStripe\Dev\SapphireTest;
 
 /**
@@ -101,5 +102,46 @@ class SmartEnumDataExtensionTest extends SapphireTest
 
         $this->expectException(\InvalidArgumentException::class);
         $item->setColor(new \stdClass());
+    }
+
+    public function testIntEnumGetterCoercesStringifiedEnumValue(): void
+    {
+        $item = SmartEnumTestItem::create();
+        $item->setField('Priority', '3');
+
+        $this->assertSame(
+            TestPriority::High,
+            $item->getPriority(),
+            'getPriority() coerces stringified ENUM ints before tryFrom()'
+        );
+    }
+
+    public function testIntEnumSetterAndGetter(): void
+    {
+        $item = SmartEnumTestItem::create();
+        $item->setPriorityScalar(TestPriority::High);
+
+        $this->assertSame(
+            TestPriority::High->value,
+            $item->getField('PriorityScalar'),
+            'PriorityScalar column stores the int backing scalar'
+        );
+        $this->assertSame(
+            TestPriority::High,
+            $item->getPriorityScalar(),
+            'getPriorityScalar() returns the matching int enum case'
+        );
+    }
+
+    public function testIntEnumSetterAcceptsBackingScalar(): void
+    {
+        $item = SmartEnumTestItem::create();
+        $item->setPriority(1);
+
+        $this->assertSame(
+            TestPriority::Low,
+            $item->getPriority(),
+            'setPriority() accepts an int backing scalar'
+        );
     }
 }

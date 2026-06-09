@@ -1,6 +1,6 @@
 # Silverstripe SmartEnum DBField
 
-Map a PHP 8.1+ `BackedEnum` to a Silverstripe `DataObject` database column. Values are derived from enum cases automatically. Physical storage can be a MySQL `ENUM` (default) or a `VARCHAR` when you need to avoid costly `ENUM` alters on large tables.
+Map a PHP 8.1+ `BackedEnum` to a Silverstripe `DataObject` database column. Values are derived from enum cases automatically. Physical storage can be a MySQL `ENUM` (default) or a native scalar column (`VARCHAR` for string-backed enums, `INT` for int-backed enums) when you need to avoid costly `ENUM` alters on large tables.
 
 CMS ModelAdmin and `DataObject` edit forms scaffold a `DropdownField` with the enum’s backing values (inherited from Silverstripe’s `DBEnum`).
 
@@ -46,6 +46,14 @@ class MyRecord extends DataObject
 }
 ```
 
+Int-backed enums work the same way; pass the int backing scalar as the default:
+
+```php
+private static $db = [
+    'Priority' => 'SmartEnum("My\\\\Namespace\\\\Priority", 1)',
+];
+```
+
 You can also reference the field class directly in PHP if you build the `$db` array in code:
 
 ```php
@@ -66,6 +74,7 @@ Pass an explicit default as the second argument. Use the **backing scalar** of t
 
 ```php
 'Status' => 'SmartEnum("My\\\\Namespace\\\\Status", "PENDING")',
+'Priority' => 'SmartEnum("My\\\\Namespace\\\\Priority", 1)',
 ```
 
 You can also pass `null` explicitly; that is equivalent to omitting the default:
@@ -80,20 +89,26 @@ The default must match a case on the enum. Invalid scalars and enum cases from a
 
 Unlike core `DBEnum`, integer defaults are **not** treated as list indices. Pass the actual backing value (or an enum case), not a positional index.
 
-## MySQL ENUM vs VARCHAR
+## MySQL ENUM vs scalar storage
 
-| Storage | When to use |
-|--------|-------------|
-| `enum` (default) | Smaller schema; values enforced by MySQL; fine for smaller tables or early-stage models. |
-| `varchar` | Large tables where altering an `ENUM` is slow or risky; values still defined by the PHP enum in application code. |
+| Storage | String-backed enum | Int-backed enum |
+|--------|-------------------|-----------------|
+| `enum` (default) | MySQL `ENUM` | MySQL `ENUM` (values stored as quoted ints; coerced on read) |
+| `scalar` | `VARCHAR` | `INT` |
+| `varchar` | Alias for `scalar` | Alias for `scalar` |
+
+Use `enum` for smaller schemas with values enforced by MySQL. Use `scalar` on large tables where altering an `ENUM` is slow or risky, or when you want a native `INT` column for int-backed enums.
 
 Per-field override in the field spec options (4th argument):
 
 ```php
-'Status' => 'SmartEnum("My\\\\Namespace\\\\Status", "PENDING", ["storage" => "varchar", "varchar_length" => 64])',
+'Status' => 'SmartEnum("My\\\\Namespace\\\\Status", "PENDING", ["storage" => "scalar", "varchar_length" => 64])',
+'Priority' => 'SmartEnum("My\\\\Namespace\\\\Priority", 1, ["storage" => "scalar"])',
 ```
 
-`varchar_length` is optional; when omitted, the length is `max(50, longest backing value length)` capped at 255.
+For string-backed `scalar` storage, `varchar_length` is optional; when omitted, the length is `max(50, longest backing value length)` capped at 255.
+
+Int-backed enums with `enum` storage return stringified values from MySQL. The `SmartEnumDataExtension` coerces numeric strings back to `int` before resolving enum cases.
 
 ### YAML / site-wide default
 
@@ -104,7 +119,7 @@ Per-field storage must be set in the field spec options (4th argument) as shown 
 Name: my-smartenum-storage
 ---
 ArchiPro\Silverstripe\SmartEnum\DBSmartEnum:
-  default_storage: enum   # or varchar
+  default_storage: enum   # or scalar
 ```
 
 Previously documented `enum_storage` (per PHP enum class) is removed; move those overrides into each `$db` field spec.
@@ -122,9 +137,9 @@ Writes via `$record->Status = 'PENDING'` still store the scalar; the extension i
 
 ## CMS forms
 
-No extra configuration is required. `scaffoldFormField()` returns a `DropdownField` listing all backing values, for both `enum` and `varchar` storage modes.
+No extra configuration is required. `scaffoldFormField()` returns a `DropdownField` listing all backing values, for both `enum` and `scalar` storage modes.
 
-## Migrating ENUM → VARCHAR on production
+## Migrating ENUM → scalar on production
 
 Changing storage on a live, large table is an operational task. `dev/build` may issue `ALTER TABLE` statements that lock or rebuild the table for a long time. Plan a manual migration and maintenance window; do not rely on a casual `dev/build` on production for storage flips.
 

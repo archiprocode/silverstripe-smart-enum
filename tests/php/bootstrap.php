@@ -12,7 +12,10 @@ if (is_readable($envFile)) {
     }
 }
 
-// PHPUnit 9 rejects unknown CLI flags; SapphireTest::start() looks for `flush` in argv.
+// SapphireTest boots via HTTPApplication and reads `flush` from request vars, not argv.
+$_GET['flush'] = 1;
+$_REQUEST['flush'] = 1;
+// Fallback when HTTPApplication is unavailable.
 $_SERVER['argv'][] = 'flush';
 
 require __DIR__ . '/../../vendor/silverstripe/framework/tests/bootstrap.php';

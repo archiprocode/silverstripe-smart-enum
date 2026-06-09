@@ -35,5 +35,13 @@ class SmartEnumTestItem extends DataObject implements TestOnly
             . '["storage" => "varchar"])',
         'ColorNoDefault' => DBSmartEnum::class
             . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor")',
+        'Priority' => DBSmartEnum::class
+            . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", 1)',
+        'PriorityScalar' => DBSmartEnum::class
+            . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", 3, '
+            . '["storage" => "scalar"])',
+        'PriorityNoDefault' => DBSmartEnum::class
+            . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", null, '
+            . '["storage" => "scalar"])',
     ];
 }
