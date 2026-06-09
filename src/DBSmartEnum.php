@@ -2,6 +2,7 @@
 
 namespace ArchiPro\Silverstripe\SmartEnum;
 
+use BackedEnum;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\ORM\Connect\MySQLDatabase;
@@ -49,7 +50,7 @@ class DBSmartEnum extends DBEnum
      *                               instantiates DBField subclasses with null arguments while inspecting types
      *                               (see {@see \SilverStripe\ORM\DataObject::dbObject()}); we must tolerate that
      *                               and pass through to the parent unchanged.
-     * @param int|string|null $default
+     * @param \BackedEnum|int|string|null $default Backing scalar or enum case; null when omitted.
      * @param array<string, mixed> $options Optional field options; `storage` (`enum`|`varchar`) and
      *                                      `varchar_length` (int) are consumed by this class.
      *
@@ -59,7 +60,7 @@ class DBSmartEnum extends DBEnum
      *                           column, but the matching $indexes entry would survive, generating a
      *                           `Key column doesn't exist` failure later in CI.
      */
-    public function __construct($name = null, $enumClass = null, $default = 0, $options = [])
+    public function __construct($name = null, $enumClass = null, $default = null, $options = [])
     {
         $values = null;
         $this->enumClass = $enumClass ? (string) $enumClass : null;
@@ -97,7 +98,13 @@ class DBSmartEnum extends DBEnum
         $parentOptions = $options;
         unset($parentOptions['storage'], $parentOptions['varchar_length']);
 
-        parent::__construct($name, $values, $default, $parentOptions);
+        $resolvedDefault = $this->resolveDefault($this->enumClass, $values ?? [], $default);
+
+        parent::__construct($name, $values, null, $parentOptions);
+
+        if ($resolvedDefault !== null) {
+            $this->setDefault($resolvedDefault);
+        }
     }
 
     /**
@@ -150,6 +157,53 @@ class DBSmartEnum extends DBEnum
             'type' => 'varchar',
             'parts' => $parts,
         ]);
+    }
+
+    /**
+     * Normalise and validate the field default against the backing enum.
+     *
+     * @param list<int|string> $values
+     *
+     * @throws \InvalidArgumentException When a non-null default is not a case or backing scalar on $enumClass.
+     */
+    private function resolveDefault(?string $enumClass, array $values, mixed $default): int|string|null
+    {
+        if ($default === null) {
+            return null;
+        }
+
+        if ($enumClass === null) {
+            return null;
+        }
+
+        if ($default instanceof BackedEnum) {
+            if (!is_a($default, $enumClass)) {
+                throw new \InvalidArgumentException(sprintf(
+                    'DBSmartEnum: default enum case must be an instance of "%s", %s given.',
+                    $enumClass,
+                    $default::class
+                ));
+            }
+
+            return $default->value;
+        }
+
+        if (!is_int($default) && !is_string($default)) {
+            throw new \InvalidArgumentException(sprintf(
+                'DBSmartEnum: default must be a BackedEnum case, string, int, or null; %s given.',
+                get_debug_type($default)
+            ));
+        }
+
+        if (!in_array($default, $values, true)) {
+            throw new \InvalidArgumentException(sprintf(
+                'DBSmartEnum: default value "%s" does not match any case on "%s".',
+                (string) $default,
+                $enumClass
+            ));
+        }
+
+        return $default;
     }
 
     /**

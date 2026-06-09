@@ -4,6 +4,7 @@ namespace ArchiPro\Silverstripe\SmartEnum\Tests;
 
 use ArchiPro\Silverstripe\SmartEnum\DBSmartEnum;
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestColor;
+use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\TestSize;
 use ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures\UnitOnlyEnum;
 use SilverStripe\Dev\SapphireTest;
 
@@ -51,6 +52,62 @@ class DBSmartEnumTest extends SapphireTest
         $this->assertSame('Status', $dbField->getName(), 'Field name is set when enum class is omitted');
         $this->assertSame([], $dbField->getEnum(), 'No enum values when enum class is omitted');
         $this->assertNull($dbField->getEnumClass(), 'Enum class remains null when not configured');
+        $this->assertNull($dbField->getDefault(), 'Default is null when enum class is omitted');
+    }
+
+    public function testConstructorDefaultIsNullWhenOmitted(): void
+    {
+        $dbField = new DBSmartEnum('Status', TestColor::class);
+
+        $this->assertNull(
+            $dbField->getDefault(),
+            'Omitted default leaves the column default null'
+        );
+    }
+
+    public function testConstructorAcceptsEnumCaseAsDefault(): void
+    {
+        $dbField = new DBSmartEnum('Status', TestColor::class, TestColor::Red);
+
+        $this->assertSame(
+            TestColor::Red->value,
+            $dbField->getDefault(),
+            'Enum case default is normalised to the backing scalar'
+        );
+    }
+
+    public function testConstructorAcceptsExplicitNullDefault(): void
+    {
+        $dbField = new DBSmartEnum('Status', TestColor::class, null);
+
+        $this->assertNull(
+            $dbField->getDefault(),
+            'Explicit null default leaves the column default null'
+        );
+    }
+
+    public function testConstructorThrowsWhenScalarDefaultNotInEnum(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('does not match any case');
+
+        new DBSmartEnum('Status', TestColor::class, 'green');
+    }
+
+    public function testConstructorThrowsWhenIntegerDefaultIsIndexNotBackingValue(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('does not match any case');
+
+        new DBSmartEnum('Status', TestColor::class, 0);
+    }
+
+    public function testConstructorThrowsWhenEnumCaseClassMismatch(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage(TestColor::class);
+
+        new DBSmartEnum('Status', TestColor::class, TestSize::Small);
     }
 
     public function testConstructorThrowsWhenEnumClassCannotBeResolved(): void

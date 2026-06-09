@@ -56,19 +56,29 @@ use ArchiPro\Silverstripe\SmartEnum\DBSmartEnum;
 
 ## Default value
 
-Pass the backing value as the second argument:
+Omit the second argument when the column should have no default. New records start with an empty value until the field is set:
+
+```php
+'Status' => 'SmartEnum("My\\\\Namespace\\\\Status")',
+```
+
+Pass an explicit default as the second argument. Use the **backing scalar** of the enum case that represents the initial business state (for example the status a new record should start in):
 
 ```php
 'Status' => 'SmartEnum("My\\\\Namespace\\\\Status", "PENDING")',
 ```
 
-Allow no default (empty / null default at the database layer) by passing `null`:
+You can also pass `null` explicitly; that is equivalent to omitting the default:
 
 ```php
 'Status' => 'SmartEnum("My\\\\Namespace\\\\Status", null)',
 ```
 
-This follows core `DBEnum` semantics.
+When building the `$db` array in PHP (not a string field spec), you may pass a `BackedEnum` case instead of the scalar.
+
+The default must match a case on the enum. Invalid scalars and enum cases from another type are rejected at field construction time.
+
+Unlike core `DBEnum`, integer defaults are **not** treated as list indices. Pass the actual backing value (or an enum case), not a positional index.
 
 ## MySQL ENUM vs VARCHAR
 

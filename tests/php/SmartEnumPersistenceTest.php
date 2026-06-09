@@ -32,6 +32,25 @@ class SmartEnumPersistenceTest extends SapphireTest
 
     protected $usesDatabase = true;
 
+    public function testFixtureWithoutDefaultPersistsNull(): void
+    {
+        $item = SmartEnumTestItem::create();
+        $item->write();
+
+        $reloaded = SmartEnumTestItem::get()->byID($item->ID);
+
+        $this->assertNull(
+            $reloaded->getColorNoDefault(),
+            'New records without a field default return null from the typed getter'
+        );
+
+        $stored = $reloaded->getField('ColorNoDefault');
+        $this->assertTrue(
+            $stored === null || $stored === '',
+            'New records without a field default persist an empty column value'
+        );
+    }
+
     public function testFixtureDefaultsToRed(): void
     {
         $item = SmartEnumTestItem::create();
