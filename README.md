@@ -31,7 +31,7 @@ The module registers a `SmartEnum` Injector alias for use in `$db` field specs.
 
 ## Define a SmartEnum on a DataObject
 
-Double-escape backslashes in the enum class name inside the field specification string:
+Use the `SmartEnum` Injector alias in your `$db` array. Double-escape backslashes in the enum class name inside the field specification string:
 
 ```php
 use SilverStripe\ORM\DataObject;
@@ -52,14 +52,6 @@ Int-backed enums work the same way; pass the int backing scalar as the default:
 private static $db = [
     'Priority' => 'SmartEnum("My\\\\Namespace\\\\Priority", 1)',
 ];
-```
-
-You can also reference the field class directly in PHP if you build the `$db` array in code:
-
-```php
-use ArchiPro\Silverstripe\SmartEnum\DBSmartEnum;
-
-'Status' => DBSmartEnum::class . '("My\\\\Namespace\\\\Status", "PENDING")',
 ```
 
 ## Default value
@@ -108,7 +100,7 @@ Per-field override in the field spec options (4th argument):
 
 For string-backed `scalar` storage, `varchar_length` is optional; when omitted, the length is `max(50, longest backing value length)` capped at 255.
 
-Int-backed enums with `enum` storage return stringified values from MySQL. The `SmartEnumDataExtension` coerces numeric strings back to `int` before resolving enum cases.
+Int-backed enums with `enum` storage return stringified values from MySQL. `DBSmartEnum` coerces numeric strings back to `int` at the field boundary (for example when reading via `dbObject()` or typed accessors).
 
 ### YAML / site-wide default
 
@@ -126,14 +118,53 @@ Previously documented `enum_storage` (per PHP enum class) is removed; move those
 
 ## Typed accessors (optional)
 
-`SmartEnumDataExtension` is applied to all `DataObject` records. For each `DBSmartEnum` column `Status` it provides:
+`SmartEnumDataExtension` is **not** applied globally. Add it to each `DataObject` that uses SmartEnum columns.
+
+YAML:
+
+```yaml
+---
+Name: myrecord-smartenum
+---
+MyRecord:
+  extensions:
+    - ArchiPro\Silverstripe\SmartEnum\SmartEnumDataExtension
+```
+
+Or in PHP:
+
+```php
+private static array $extensions = [
+    ArchiPro\Silverstripe\SmartEnum\SmartEnumDataExtension::class,
+];
+```
+
+For each `DBSmartEnum` column `Status` the extension provides:
 
 - `getStatus(): ?BackedEnum` — `tryFrom()` on the stored scalar; `null` when empty or unknown.
-- `setStatus(BackedEnum|string|int|null $value)` — accepts an enum instance or a backing scalar.
+- `setStatus(BackedEnum|string|int|null $value)` — accepts an enum instance or a valid backing scalar.
 
 If the model already defines `getStatus()` / `setStatus()`, those methods take precedence over the extension.
 
-Writes via `$record->Status = 'PENDING'` still store the scalar; the extension is for typed ergonomics.
+### Property access and PHPDoc
+
+The primary use case is property access on the `DataObject`. When the extension is applied, `$record->Status` resolves via `getStatus()` / `setStatus()` and returns a `BackedEnum` instance (or `null`). Property assignment validates the value; invalid backing scalars throw `InvalidArgumentException`.
+
+Declare the typed property on your model for IDE and static analysis support:
+
+```php
+use My\Namespace\Status;
+
+/**
+ * @property Status|null $Status
+ */
+class MyRecord extends DataObject
+{
+    // ...
+}
+```
+
+`getField('Status')` still returns the raw backing scalar stored in the database record, not the enum instance.
 
 ## CMS forms
 

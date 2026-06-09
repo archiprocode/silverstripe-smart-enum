@@ -3,6 +3,8 @@
 namespace ArchiPro\Silverstripe\SmartEnum;
 
 use BackedEnum;
+use SilverStripe\Core\ClassInfo;
+use SilverStripe\Core\Injector\Injector;
 use SilverStripe\ORM\DataExtension;
 use SilverStripe\ORM\DataObjectSchema;
 
@@ -16,7 +18,7 @@ class SmartEnumDataExtension extends DataExtension
      */
     public function allMethodNames(): array
     {
-        $smartEnumFields = $this->getSmartEnumFieldNames();
+        $smartEnumFields = array_keys($this->getSmartEnumFieldMap());
         $getters = array_map(fn (string $field) => 'get' . $field, $smartEnumFields);
         $setters = array_map(fn (string $field) => 'set' . $field, $smartEnumFields);
 
@@ -30,18 +32,18 @@ class SmartEnumDataExtension extends DataExtension
      */
     public function __call(string $method, array $args = [])
     {
-        $smartEnumFields = $this->getSmartEnumFieldNames();
+        $smartEnumFields = $this->getSmartEnumFieldMap();
 
         if (str_starts_with($method, 'get')) {
             $field = substr($method, 3);
-            if (in_array($field, $smartEnumFields, true)) {
+            if (isset($smartEnumFields[$field])) {
                 return $this->readEnum($field);
             }
         }
 
         if (str_starts_with($method, 'set')) {
             $field = substr($method, 3);
-            if (in_array($field, $smartEnumFields, true)) {
+            if (isset($smartEnumFields[$field])) {
                 return $this->writeEnum($field, $args[0] ?? null);
             }
         }
@@ -54,59 +56,18 @@ class SmartEnumDataExtension extends DataExtension
      */
     private function readEnum(string $field): ?BackedEnum
     {
-        $owner = $this->getOwner();
-        $enumClass = $this->getEnumClassForField($field);
+        $dbField = $this->getDBSmartEnumForField($field);
+        $enumClass = $dbField->getEnumClass();
         if ($enumClass === null) {
             return null;
         }
 
-        $value = $owner->getField($field);
+        $value = $dbField->getValue();
         if ($value === null || $value === '') {
             return null;
         }
 
-        $value = $this->normaliseStoredValue($value, $field, $enumClass);
-
-        if ($value === null) {
-            return null;
-        }
-
         return $enumClass::tryFrom($value);
-    }
-
-    /**
-     * Coerce DB values to the enum backing type (e.g. MySQL ENUM returns stringified ints).
-     *
-     * @param class-string<BackedEnum> $enumClass
-     */
-    private function normaliseStoredValue(mixed $value, string $field, string $enumClass): int|string|null
-    {
-        if ($this->getBackingTypeForField($field) !== 'int') {
-            return is_string($value) || is_int($value) ? $value : null;
-        }
-
-        if (is_int($value)) {
-            return $value;
-        }
-
-        if (is_string($value) && is_numeric($value)) {
-            return (int) $value;
-        }
-
-        return null;
-    }
-
-    /**
-     * Backing scalar type for the field's enum: `string` or `int`.
-     */
-    private function getBackingTypeForField(string $field): string
-    {
-        $dbObject = $this->getOwner()->dbObject($field);
-        if ($dbObject instanceof DBSmartEnum) {
-            return $dbObject->getBackingType();
-        }
-
-        return 'string';
     }
 
     /**
@@ -117,63 +78,83 @@ class SmartEnumDataExtension extends DataExtension
      */
     private function writeEnum(string $field, mixed $value): static
     {
-        $owner = $this->getOwner();
+        $dbField = $this->getDBSmartEnumForField($field);
+        $dbField->setValue($value);
+        $this->getOwner()->setField($field, $dbField->getValue());
 
-        if ($value instanceof BackedEnum) {
-            $owner->setField($field, $value->value);
-            return $this;
-        }
-
-        if ($value === null || is_string($value) || is_int($value)) {
-            $owner->setField($field, $value);
-            return $this;
-        }
-
-        throw new \InvalidArgumentException(sprintf(
-            'SmartEnumDataExtension: set%s() expects a BackedEnum, string, int, or null; %s given.',
-            $field,
-            get_debug_type($value)
-        ));
+        return $this;
     }
 
     /**
-     * Discover SmartEnum columns from the cached schema without opening a database connection.
+     * Discover SmartEnum columns from schema field specs via the Injector binding.
      *
-     * @return string[]
+     * @return array<string, true>
      */
-    private function getSmartEnumFieldNames(): array
+    private function getSmartEnumFieldMap(): array
     {
-        $owner = $this->getOwner();
-        $fields = DataObjectSchema::create()->databaseFields(get_class($owner), false);
+        static $cache = [];
 
-        return array_keys(array_filter(
-            $fields,
-            fn (string $fieldSpec) => $this->isSmartEnumFieldSpec($fieldSpec)
-        ));
-    }
+        $class = $this->getOwner()::class;
 
-    private function isSmartEnumFieldSpec(string $fieldSpec): bool
-    {
-        return $fieldSpec === DBSmartEnum::class
-            || str_contains($fieldSpec, 'DBSmartEnum(')
-            || str_contains($fieldSpec, 'SmartEnum(');
+        if (isset($cache[$class])) {
+            return $cache[$class];
+        }
+
+        $map = [];
+        $fields = DataObjectSchema::create()->databaseFields($class, false);
+
+        foreach ($fields as $fieldName => $fieldSpec) {
+            if ($this->resolveDBSmartEnumClass($fieldSpec) !== null) {
+                $map[$fieldName] = true;
+            }
+        }
+
+        $cache[$class] = $map;
+
+        return $map;
     }
 
     /**
-     * @return class-string<BackedEnum>|null
+     * Resolve the DBField class for a schema field spec without instantiating the field.
+     *
+     * @return class-string<DBSmartEnum>|null
      */
-    private function getEnumClassForField(string $field): ?string
+    private function resolveDBSmartEnumClass(string $fieldSpec): ?string
     {
-        $dbObject = $this->getOwner()->dbObject($field);
-        if (!$dbObject instanceof DBSmartEnum) {
+        if (class_exists($fieldSpec) && is_a($fieldSpec, DBSmartEnum::class, true)) {
+            return $fieldSpec;
+        }
+
+        $serviceName = $fieldSpec;
+        if (str_contains($fieldSpec, '(')) {
+            [$serviceName] = ClassInfo::parse_class_spec($fieldSpec);
+        }
+
+        if (class_exists($serviceName) && is_a($serviceName, DBSmartEnum::class, true)) {
+            return $serviceName;
+        }
+
+        $spec = Injector::inst()->getServiceSpec($serviceName);
+        if (!$spec || empty($spec['class'])) {
             return null;
         }
 
-        $enumClass = $dbObject->getEnumClass();
-        if ($enumClass !== null && is_subclass_of($enumClass, BackedEnum::class)) {
-            return $enumClass;
+        $class = $spec['class'];
+
+        return is_a($class, DBSmartEnum::class, true) ? $class : null;
+    }
+
+    private function getDBSmartEnumForField(string $field): DBSmartEnum
+    {
+        $dbObject = $this->getOwner()->dbObject($field);
+        if (!$dbObject instanceof DBSmartEnum) {
+            throw new \InvalidArgumentException(sprintf(
+                'SmartEnumDataExtension: field "%s" on "%s" is not a DBSmartEnum column.',
+                $field,
+                $this->getOwner()::class
+            ));
         }
 
-        return null;
+        return $dbObject;
     }
 }

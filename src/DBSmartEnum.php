@@ -6,6 +6,7 @@ use BackedEnum;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\ORM\Connect\MySQLDatabase;
+use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DB;
 use SilverStripe\ORM\FieldType\DBEnum;
 
@@ -52,14 +53,14 @@ class DBSmartEnum extends DBEnum
     protected int $varcharLength = 255;
 
     /**
-     * @param string|null $name      Field name passed through to {@see DBEnum::__construct}
-     * @param class-string<BackedEnum>|null $enumClass Fully-qualified PHP enum class name. May be null because Silverstripe
-     *                               instantiates DBField subclasses with null arguments while inspecting types
-     *                               (see {@see \SilverStripe\ORM\DataObject::dbObject()}); we must tolerate that
-     *                               and pass through to the parent unchanged.
+     * @param string|null $name Field name passed through to {@see DBEnum::__construct}
+     * @param class-string<BackedEnum>|null $enumClass Fully-qualified PHP enum class name. May be null
+     *                               because Silverstripe instantiates DBField subclasses with null
+     *                               arguments while inspecting types
+     *                               (see {@see \SilverStripe\ORM\DataObject::dbObject()}).
      * @param \BackedEnum|int|string|null $default Backing scalar or enum case; null when omitted.
-     * @param array<string, mixed> $options Optional field options; `storage` (`enum`|`scalar`|`varchar`) and
-     *                                      `varchar_length` (int) are consumed by this class.
+     * @param array<string, mixed> $options Optional field options; `storage` (`enum`|`scalar`|`varchar`)
+     *                                      and `varchar_length` (int) are consumed by this class.
      *
      * @throws \RuntimeException When $enumClass is provided but cannot be resolved (e.g. autoload race in a
      *                           paratest worker fork) or is not a BackedEnum. Without this guard we would
@@ -167,6 +168,39 @@ class DBSmartEnum extends DBEnum
     }
 
     /**
+     * Ensure int-backed values are returned as ints (e.g. MySQL ENUM stringifies ints).
+     *
+     * @return mixed
+     */
+    public function getValue()
+    {
+        $value = parent::getValue();
+
+        if ($this->backingType === 'int' && is_string($value) && is_numeric($value)) {
+            return (int) $value;
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param mixed $value
+     * @param DataObject|array|null $record
+     * @param bool $markChanged
+     * @return $this
+     */
+    public function setValue($value, $record = null, $markChanged = true)
+    {
+        if (!$markChanged) {
+            return parent::setValue($value, $record, $markChanged);
+        }
+
+        $normalised = $this->normaliseBackingValue($value, true);
+
+        return parent::setValue($normalised, $record, $markChanged);
+    }
+
+    /**
      * @return void
      */
     public function requireField()
@@ -223,42 +257,74 @@ class DBSmartEnum extends DBEnum
      */
     private function resolveDefault(?string $enumClass, array $values, mixed $default): int|string|null
     {
-        if ($default === null) {
+        if ($default === null || $enumClass === null) {
             return null;
         }
 
-        if ($enumClass === null) {
-            return null;
+        return $this->normaliseBackingValue($default, true, $values);
+    }
+
+    /**
+     * Validate and coerce a value to the enum backing scalar.
+     *
+     * @param list<int|string>|null $values Allowed backing scalars; defaults to {@see getEnum()}.
+     *
+     * @throws \InvalidArgumentException When $value is not a valid backing scalar for this enum.
+     */
+    private function normaliseBackingValue(mixed $value, bool $allowNull, ?array $values = null): int|string|null
+    {
+        if ($value === null) {
+            if ($allowNull) {
+                return null;
+            }
+
+            throw new \InvalidArgumentException(
+                'DBSmartEnum: value must be a BackedEnum case, string, int, or null; null given.'
+            );
         }
 
-        if ($default instanceof BackedEnum) {
-            if (!is_a($default, $enumClass)) {
+        $values ??= $this->getEnum();
+        $enumClass = $this->enumClass;
+
+        if ($value instanceof BackedEnum) {
+            if ($enumClass !== null && !is_a($value, $enumClass)) {
                 throw new \InvalidArgumentException(sprintf(
-                    'DBSmartEnum: default enum case must be an instance of "%s", %s given.',
+                    'DBSmartEnum: enum case must be an instance of "%s", %s given.',
                     $enumClass,
-                    $default::class
+                    $value::class
                 ));
             }
 
-            return $default->value;
+            return $this->coerceScalarForBackingType($value->value);
         }
 
-        if (!is_int($default) && !is_string($default)) {
+        if (!is_int($value) && !is_string($value)) {
             throw new \InvalidArgumentException(sprintf(
-                'DBSmartEnum: default must be a BackedEnum case, string, int, or null; %s given.',
-                get_debug_type($default)
+                'DBSmartEnum: value must be a BackedEnum case, string, int, or null; %s given.',
+                get_debug_type($value)
             ));
         }
 
-        if (!in_array($default, $values, true)) {
+        $scalar = $this->coerceScalarForBackingType($value);
+
+        if ($enumClass !== null && !in_array($scalar, $values, true)) {
             throw new \InvalidArgumentException(sprintf(
-                'DBSmartEnum: default value "%s" does not match any case on "%s".',
-                (string) $default,
+                'DBSmartEnum: value "%s" does not match any case on "%s".',
+                (string) $value,
                 $enumClass
             ));
         }
 
-        return $default;
+        return $scalar;
+    }
+
+    private function coerceScalarForBackingType(int|string $value): int|string
+    {
+        if ($this->backingType === 'int') {
+            return is_int($value) ? $value : (int) $value;
+        }
+
+        return $value;
     }
 
     /**
@@ -270,23 +336,23 @@ class DBSmartEnum extends DBEnum
             return $this->normaliseStorage((string) $options['storage']);
         }
 
-        $default = $this->getConfigValue('default_storage', 'enum');
+        $default = Config::inst()->get(static::class, 'default_storage') ?? 'enum';
 
         return $this->normaliseStorage((string) $default);
     }
 
     /**
-     * @param list<int|string>|null $backingValues
+     * @param list<int|string> $backingValues
      * @param array<string, mixed> $options
      */
-    private function resolveVarcharLength(?array $backingValues, array $options): int
+    private function resolveVarcharLength(array $backingValues, array $options): int
     {
         if (isset($options['varchar_length'])) {
             return $this->clampVarcharLength((int) $options['varchar_length']);
         }
 
         $maxLen = 0;
-        foreach ($backingValues ?? [] as $value) {
+        foreach ($backingValues as $value) {
             $maxLen = max($maxLen, strlen((string) $value));
         }
 
@@ -314,17 +380,5 @@ class DBSmartEnum extends DBEnum
     private function clampVarcharLength(int $length): int
     {
         return max(1, min(255, $length));
-    }
-
-    /**
-     * Read configurable defaults when Silverstripe config manifests are available (e.g. skipped in bare PHPUnit).
-     */
-    private function getConfigValue(string $name, mixed $fallback): mixed
-    {
-        try {
-            return Config::inst()->get(static::class, $name) ?? $fallback;
-        } catch (\Throwable) {
-            return $fallback;
-        }
     }
 }

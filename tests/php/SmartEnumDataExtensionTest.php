@@ -104,6 +104,16 @@ class SmartEnumDataExtensionTest extends SapphireTest
         $item->setColor(new \stdClass());
     }
 
+    public function testSetterRejectsInvalidScalar(): void
+    {
+        $item = SmartEnumTestItem::create();
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('does not match any case');
+
+        $item->setColor('green');
+    }
+
     public function testIntEnumGetterCoercesStringifiedEnumValue(): void
     {
         $item = SmartEnumTestItem::create();

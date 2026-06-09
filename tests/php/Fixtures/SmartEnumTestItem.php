@@ -2,7 +2,6 @@
 
 namespace ArchiPro\Silverstripe\SmartEnum\Tests\Fixtures;
 
-use ArchiPro\Silverstripe\SmartEnum\DBSmartEnum;
 use ArchiPro\Silverstripe\SmartEnum\SmartEnumDataExtension;
 use SilverStripe\Dev\TestOnly;
 use SilverStripe\ORM\DataObject;
@@ -28,20 +27,15 @@ class SmartEnumTestItem extends DataObject implements TestOnly
      * @config
      */
     private static array $db = [
-        'Color' => DBSmartEnum::class
-            . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor", "red")',
-        'ColorAsVarchar' => DBSmartEnum::class
-            . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor", "red", '
-            . '["storage" => "varchar"])',
-        'ColorNoDefault' => DBSmartEnum::class
-            . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor")',
-        'Priority' => DBSmartEnum::class
-            . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", 1)',
-        'PriorityScalar' => DBSmartEnum::class
-            . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", 3, '
-            . '["storage" => "scalar"])',
-        'PriorityNoDefault' => DBSmartEnum::class
-            . '("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", null, '
-            . '["storage" => "scalar"])',
+        'Color' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor", "red")',
+        'ColorAsVarchar' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor", '
+            . '"red", ["storage" => "varchar"])',
+        'ColorNoDefault' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor")',
+        'Priority' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", 1)',
+        'PriorityScalar' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", '
+            . '3, ["storage" => "scalar"])',
+        'PriorityNoDefault' => 'SmartEnum('
+            . '"ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", '
+            . 'null, ["storage" => "scalar"])',
     ];
 }

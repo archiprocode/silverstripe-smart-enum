@@ -320,4 +320,43 @@ class DBSmartEnumTest extends SapphireTest
             'CMS dropdown options stay int backing-value keyed'
         );
     }
+
+    public function testGetValueCoercesStringifiedInt(): void
+    {
+        $dbField = new DBSmartEnum('Priority', TestPriority::class);
+        $dbField->setValue('3', null, false);
+
+        $this->assertSame(
+            TestPriority::High->value,
+            $dbField->getValue(),
+            'getValue() coerces stringified ENUM ints for int-backed enums'
+        );
+    }
+
+    public function testSetValueRejectsInvalidScalar(): void
+    {
+        $dbField = new DBSmartEnum('Color', TestColor::class);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('does not match any case');
+
+        $dbField->setValue('green');
+    }
+
+    public function testDefaultStorageFromConfig(): void
+    {
+        DBSmartEnum::config()->set('default_storage', 'scalar');
+
+        try {
+            $dbField = new DBSmartEnum('Color', TestColor::class, TestColor::Red->value);
+
+            $this->assertSame(
+                'scalar',
+                $dbField->getStorage(),
+                'default_storage config applies when field spec omits storage'
+            );
+        } finally {
+            DBSmartEnum::config()->remove('default_storage');
+        }
+    }
 }
