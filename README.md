@@ -1,6 +1,6 @@
 # Silverstripe SmartEnum DBField
 
-Map a PHP 8.1+ `BackedEnum` to a Silverstripe `DataObject` database column. Values are derived from enum cases automatically. Physical storage can be a MySQL `ENUM` (default) or a native scalar column (`VARCHAR` for string-backed enums, `INT` for int-backed enums) when you need to avoid costly `ENUM` alters on large tables.
+Map a PHP 8.1+ `BackedEnum` to a Silverstripe `DataObject` database column. Values are derived from enum cases automatically. By default the column uses a database-native `ENUM` type (MySQL today); set `use_native_db_enum` to `false` to use a scalar column (`VARCHAR` for string-backed enums, `INT` for int-backed enums) when you need to avoid costly `ENUM` alters on large tables. This option refers to the database column type, not PHP `BackedEnum`.
 
 CMS ModelAdmin and `DataObject` edit forms scaffold a `DropdownField` with the enum’s backing values (inherited from Silverstripe’s `DBEnum`).
 
@@ -81,40 +81,37 @@ The default must match a case on the enum. Invalid scalars and enum cases from a
 
 Unlike core `DBEnum`, integer defaults are **not** treated as list indices. Pass the actual backing value (or an enum case), not a positional index.
 
-## MySQL ENUM vs scalar storage
+## MySQL ENUM vs scalar columns
 
-| Storage | String-backed enum | Int-backed enum |
-|--------|-------------------|-----------------|
-| `enum` (default) | MySQL `ENUM` | MySQL `ENUM` (values stored as quoted ints; coerced on read) |
-| `scalar` | `VARCHAR` | `INT` |
-| `varchar` | Alias for `scalar` | Alias for `scalar` |
+| `use_native_db_enum` | String-backed enum | Int-backed enum |
+|----------------------|-------------------|-----------------|
+| `true` (default) | MySQL `ENUM` | MySQL `ENUM` (values stored as quoted ints; coerced on read) |
+| `false` | `VARCHAR` | `INT` |
 
-Use `enum` for smaller schemas with values enforced by MySQL. Use `scalar` on large tables where altering an `ENUM` is slow or risky, or when you want a native `INT` column for int-backed enums.
+Use `use_native_db_enum: true` for smaller schemas with values enforced by the database. Set `use_native_db_enum` to `false` on large tables where altering an `ENUM` is slow or risky, or when you want a native `INT` column for int-backed enums.
 
 Per-field override in the field spec options (4th argument):
 
 ```php
-'Status' => 'SmartEnum("My\\\\Namespace\\\\Status", "PENDING", ["storage" => "scalar", "varchar_length" => 64])',
-'Priority' => 'SmartEnum("My\\\\Namespace\\\\Priority", 1, ["storage" => "scalar"])',
+'Status' => 'SmartEnum("My\\\\Namespace\\\\Status", "PENDING", ["use_native_db_enum" => false, "varchar_length" => 64])',
+'Priority' => 'SmartEnum("My\\\\Namespace\\\\Priority", 1, ["use_native_db_enum" => false])',
 ```
 
-For string-backed `scalar` storage, `varchar_length` is optional; when omitted, the length is `max(50, longest backing value length)` capped at 255.
+For string-backed enums with `use_native_db_enum: false`, `varchar_length` is optional; when omitted, the length is `max(50, longest backing value length)` capped at 255.
 
-Int-backed enums with `enum` storage return stringified values from MySQL. `DBSmartEnum` coerces numeric strings back to `int` at the field boundary (for example when reading via `dbObject()` or typed accessors).
+Int-backed enums with `use_native_db_enum: true` return stringified values from MySQL. `DBSmartEnum` coerces numeric strings back to `int` at the field boundary (for example when reading via `dbObject()` or typed accessors).
 
 ### YAML / site-wide default
 
-Per-field storage must be set in the field spec options (4th argument) as shown above. To change the default for all SmartEnum fields that do not pass `storage` in their options, use static config:
+Per-field `use_native_db_enum` must be set in the field spec options (4th argument) as shown above. To change the default for all SmartEnum fields that omit it, use static config:
 
 ```yaml
 ---
 Name: my-smartenum-storage
 ---
 ArchiPro\Silverstripe\SmartEnum\DBSmartEnum:
-  default_storage: enum   # or scalar
+  default_use_native_db_enum: true   # or false
 ```
-
-Previously documented `enum_storage` (per PHP enum class) is removed; move those overrides into each `$db` field spec.
 
 ## Typed accessors (optional)
 
@@ -168,11 +165,11 @@ class MyRecord extends DataObject
 
 ## CMS forms
 
-No extra configuration is required. `scaffoldFormField()` returns a `DropdownField` listing all backing values, for both `enum` and `scalar` storage modes.
+No extra configuration is required. `scaffoldFormField()` returns a `DropdownField` listing all backing values, whether or not `use_native_db_enum` is enabled.
 
-## Migrating ENUM → scalar on production
+## Migrating database ENUM → scalar columns on production
 
-Changing storage on a live, large table is an operational task. `dev/build` may issue `ALTER TABLE` statements that lock or rebuild the table for a long time. Plan a manual migration and maintenance window; do not rely on a casual `dev/build` on production for storage flips.
+Flipping `use_native_db_enum` from `true` to `false` on a live, large table is an operational task. `dev/build` may issue `ALTER TABLE` statements that lock or rebuild the table for a long time. Plan a manual migration and maintenance window; do not rely on a casual `dev/build` on production for column-type changes.
 
 ## Running tests
 

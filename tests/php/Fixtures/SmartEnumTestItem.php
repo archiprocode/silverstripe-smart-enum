@@ -28,14 +28,14 @@ class SmartEnumTestItem extends DataObject implements TestOnly
      */
     private static array $db = [
         'Color' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor", "red")',
-        'ColorAsVarchar' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor", '
-            . '"red", ["storage" => "varchar"])',
+        'ColorAsScalar' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor", '
+            . '"red", ["use_native_db_enum" => false])',
         'ColorNoDefault' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestColor")',
         'Priority' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", 1)',
-        'PriorityScalar' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", '
-            . '3, ["storage" => "scalar"])',
+        'PriorityAsInt' => 'SmartEnum("ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", '
+            . '3, ["use_native_db_enum" => false])',
         'PriorityNoDefault' => 'SmartEnum('
             . '"ArchiPro\\\\Silverstripe\\\\SmartEnum\\\\Tests\\\\Fixtures\\\\TestPriority", '
-            . 'null, ["storage" => "scalar"])',
+            . 'null, ["use_native_db_enum" => false])',
     ];
 }

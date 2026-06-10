@@ -1,6 +1,6 @@
 {
     "name": "archipro/silverstripe-smart-enum",
-    "description": "Silverstripe CMS DBField backed by PHP 8.1 BackedEnums with optional VARCHAR storage",
+    "description": "Silverstripe CMS DBField backed by PHP 8.1 BackedEnums with optional scalar column storage via use_native_db_enum",
     "type": "silverstripe-vendormodule",
     "keywords": [
         "silverstripe",

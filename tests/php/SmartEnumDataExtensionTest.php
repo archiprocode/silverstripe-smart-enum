@@ -68,20 +68,20 @@ class SmartEnumDataExtensionTest extends SapphireTest
         );
     }
 
-    public function testColorAsVarcharSetterAndGetter(): void
+    public function testColorAsScalarSetterAndGetter(): void
     {
         $item = SmartEnumTestItem::create();
-        $item->setColorAsVarchar(TestColor::Blue);
+        $item->setColorAsScalar(TestColor::Blue);
 
         $this->assertSame(
             TestColor::Blue->value,
-            $item->getField('ColorAsVarchar'),
-            'ColorAsVarchar column stores the backing scalar'
+            $item->getField('ColorAsScalar'),
+            'ColorAsScalar column stores the backing scalar'
         );
         $this->assertSame(
             TestColor::Blue,
-            $item->getColorAsVarchar(),
-            'getColorAsVarchar() returns the matching enum case for varchar-backed storage'
+            $item->getColorAsScalar(),
+            'getColorAsScalar() returns the matching enum case for scalar column storage'
         );
     }
 
@@ -129,17 +129,17 @@ class SmartEnumDataExtensionTest extends SapphireTest
     public function testIntEnumSetterAndGetter(): void
     {
         $item = SmartEnumTestItem::create();
-        $item->setPriorityScalar(TestPriority::High);
+        $item->setPriorityAsInt(TestPriority::High);
 
         $this->assertSame(
             TestPriority::High->value,
-            $item->getField('PriorityScalar'),
-            'PriorityScalar column stores the int backing scalar'
+            $item->getField('PriorityAsInt'),
+            'PriorityAsInt column stores the int backing scalar'
         );
         $this->assertSame(
             TestPriority::High,
-            $item->getPriorityScalar(),
-            'getPriorityScalar() returns the matching int enum case'
+            $item->getPriorityAsInt(),
+            'getPriorityAsInt() returns the matching int enum case'
         );
     }
 

@@ -43,9 +43,6 @@ class DBSmartEnumTest extends SapphireTest
         $this->assertSame('Status', $dbField->getName(), 'Field name was set correctly');
         $this->assertSame(['foo' => 'bar'], $dbField->getOptions(), 'Options are set correctly');
         $this->assertSame(TestColor::class, $dbField->getEnumClass(), 'BackedEnum class name is retained on the field');
-        $this->assertSame('enum', $dbField->getStorage(), 'Default logical storage is MySQL ENUM');
-        $this->assertSame('enum', $dbField->getColumnType(), 'Default column type is MySQL ENUM');
-        $this->assertSame('string', $dbField->getBackingType(), 'String-backed enum reports string backing type');
     }
 
     public function testConstructorAcceptsNullEnumClass(): void
@@ -131,106 +128,67 @@ class DBSmartEnumTest extends SapphireTest
         new DBSmartEnum('Status', UnitOnlyEnum::class);
     }
 
+    public function testConstructorThrowsWhenUseNativeDbEnumIsNotBool(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('use_native_db_enum must be a boolean');
+
+        new DBSmartEnum('Color', TestColor::class, TestColor::Red->value, ['use_native_db_enum' => 'false']);
+    }
+
     /**
-     * @return array<string, array{0: array<string, mixed>, 1: string, 2: string, 3?: int}>
+     * @return array<string, array{0: array<string, mixed>}>
      */
-    public function storageFromOptionsProvider(): array
+    public function useNativeDbEnumFromOptionsProvider(): array
     {
         return [
-            'default enum storage' => [
-                [],
-                'enum',
-                'enum',
-            ],
-            'scalar without explicit length' => [
-                ['storage' => 'scalar'],
-                'scalar',
-                'varchar',
-            ],
-            'varchar alias without explicit length' => [
-                ['storage' => 'varchar'],
-                'scalar',
-                'varchar',
-            ],
-            'scalar with explicit length' => [
-                ['storage' => 'scalar', 'varchar_length' => 32],
-                'scalar',
-                'varchar',
-                32,
-            ],
+            'default native db enum' => [[]],
+            'scalar column' => [['use_native_db_enum' => false]],
+            'scalar with explicit length' => [['use_native_db_enum' => false, 'varchar_length' => 32]],
         ];
     }
 
     /**
-     * @dataProvider storageFromOptionsProvider
+     * @dataProvider useNativeDbEnumFromOptionsProvider
      * @param array<string, mixed> $options
      */
-    public function testResolvesStorageFromOptions(
-        array $options,
-        string $expectedStorage,
-        string $expectedColumnType,
-        ?int $expectedLength = null
-    ): void {
+    public function testConsumesUseNativeDbEnumOptions(array $options): void
+    {
         $dbField = new DBSmartEnum('Color', TestColor::class, TestColor::Red->value, $options);
 
-        $this->assertSame(
-            $expectedStorage,
-            $dbField->getStorage(),
-            'Logical storage matches field spec options'
-        );
-        $this->assertSame(
-            $expectedColumnType,
-            $dbField->getColumnType(),
-            'Physical column type matches field spec options'
+        $this->assertArrayNotHasKey(
+            'use_native_db_enum',
+            $dbField->getOptions(),
+            'use_native_db_enum is consumed and not passed to parent DBEnum'
         );
 
-        if ($expectedColumnType !== 'varchar') {
+        if (!array_key_exists('varchar_length', $options)) {
             return;
         }
 
-        if ($expectedLength !== null) {
-            $this->assertSame(
-                $expectedLength,
-                $dbField->getVarcharLength(),
-                'VARCHAR length respects explicit varchar_length option'
-            );
-            $this->assertArrayNotHasKey(
-                'storage',
-                $dbField->getOptions(),
-                'storage is consumed and not passed to parent DBEnum'
-            );
-            $this->assertArrayNotHasKey(
-                'varchar_length',
-                $dbField->getOptions(),
-                'varchar_length is consumed and not passed to parent DBEnum'
-            );
-
-            return;
-        }
-
-        $this->assertGreaterThanOrEqual(
-            3,
-            $dbField->getVarcharLength(),
-            'VARCHAR length defaults from longest backing value when varchar_length is omitted'
+        $this->assertArrayNotHasKey(
+            'varchar_length',
+            $dbField->getOptions(),
+            'varchar_length is consumed and not passed to parent DBEnum'
         );
     }
 
     /**
-     * @return array<string, array{0: string, 1: array<string, mixed>}>
+     * @return array<string, array{0: bool, 1: array<string, mixed>}>
      */
-    public function enumValuesStorageProvider(): array
+    public function enumValuesUseNativeDbEnumProvider(): array
     {
         return [
-            'enum storage' => ['enum', []],
-            'scalar storage' => ['scalar', ['storage' => 'scalar']],
+            'native db enum' => [true, []],
+            'scalar column' => [false, ['use_native_db_enum' => false]],
         ];
     }
 
     /**
-     * @dataProvider enumValuesStorageProvider
+     * @dataProvider enumValuesUseNativeDbEnumProvider
      * @param array<string, mixed> $options
      */
-    public function testEnumValuesForCmsDropdown(string $storageLabel, array $options): void
+    public function testEnumValuesForCmsDropdown(bool $useNativeDbEnum, array $options): void
     {
         $dbField = new DBSmartEnum('Color', TestColor::class, TestColor::Red->value, $options);
 
@@ -241,8 +199,8 @@ class DBSmartEnumTest extends SapphireTest
             ],
             $dbField->enumValues(false),
             sprintf(
-                'CMS dropdown options stay backing-value keyed when physical storage is %s',
-                $storageLabel
+                'CMS dropdown options stay backing-value keyed when use_native_db_enum is %s',
+                $useNativeDbEnum ? 'true' : 'false'
             )
         );
     }
@@ -257,9 +215,6 @@ class DBSmartEnumTest extends SapphireTest
             'Int backing values are read from the enum cases'
         );
         $this->assertSame(1, $dbField->getDefault(), 'Int default is set correctly');
-        $this->assertSame('int', $dbField->getBackingType(), 'Int-backed enum reports int backing type');
-        $this->assertSame('enum', $dbField->getStorage(), 'Default logical storage is enum');
-        $this->assertSame('enum', $dbField->getColumnType(), 'Default column type is MySQL ENUM for int-backed enum');
     }
 
     public function testIntBackedEnumAcceptsEnumCaseAsDefault(): void
@@ -281,32 +236,6 @@ class DBSmartEnumTest extends SapphireTest
         new DBSmartEnum('Priority', TestPriority::class, 2);
     }
 
-    public function testIntBackedEnumScalarStorageUsesIntColumn(): void
-    {
-        $dbField = new DBSmartEnum(
-            'Priority',
-            TestPriority::class,
-            TestPriority::High->value,
-            ['storage' => 'scalar']
-        );
-
-        $this->assertSame('scalar', $dbField->getStorage(), 'Scalar logical storage is configured');
-        $this->assertSame('int', $dbField->getColumnType(), 'Int-backed scalar storage maps to INT column');
-    }
-
-    public function testIntBackedEnumVarcharAliasUsesIntColumn(): void
-    {
-        $dbField = new DBSmartEnum(
-            'Priority',
-            TestPriority::class,
-            TestPriority::High->value,
-            ['storage' => 'varchar']
-        );
-
-        $this->assertSame('scalar', $dbField->getStorage(), 'varchar alias normalises to scalar');
-        $this->assertSame('int', $dbField->getColumnType(), 'Int-backed varchar alias still maps to INT column');
-    }
-
     public function testIntBackedEnumValuesForCmsDropdown(): void
     {
         $dbField = new DBSmartEnum('Priority', TestPriority::class, 1);
@@ -321,15 +250,29 @@ class DBSmartEnumTest extends SapphireTest
         );
     }
 
-    public function testGetValueCoercesStringifiedInt(): void
+    public function testGetValueCoercesStringifiedIntOnlyForNativeDbEnum(): void
     {
-        $dbField = new DBSmartEnum('Priority', TestPriority::class);
-        $dbField->setValue('3', null, false);
+        $nativeDbEnumField = new DBSmartEnum('Priority', TestPriority::class);
+        $nativeDbEnumField->setValue('3', null, false);
 
         $this->assertSame(
             TestPriority::High->value,
-            $dbField->getValue(),
-            'getValue() coerces stringified ENUM ints for int-backed enums'
+            $nativeDbEnumField->getValue(),
+            'getValue() coerces stringified ENUM ints when use_native_db_enum is true'
+        );
+
+        $scalarField = new DBSmartEnum(
+            'Priority',
+            TestPriority::class,
+            null,
+            ['use_native_db_enum' => false]
+        );
+        $scalarField->setValue('3', null, false);
+
+        $this->assertSame(
+            '3',
+            $scalarField->getValue(),
+            'getValue() does not coerce stringified ints when use_native_db_enum is false'
         );
     }
 
@@ -343,20 +286,21 @@ class DBSmartEnumTest extends SapphireTest
         $dbField->setValue('green');
     }
 
-    public function testDefaultStorageFromConfig(): void
+    public function testDefaultUseNativeDbEnumFromConfig(): void
     {
-        DBSmartEnum::config()->set('default_storage', 'scalar');
+        DBSmartEnum::config()->set('default_use_native_db_enum', false);
 
         try {
-            $dbField = new DBSmartEnum('Color', TestColor::class, TestColor::Red->value);
+            $dbField = new DBSmartEnum('Priority', TestPriority::class);
+            $dbField->setValue('3', null, false);
 
             $this->assertSame(
-                'scalar',
-                $dbField->getStorage(),
-                'default_storage config applies when field spec omits storage'
+                '3',
+                $dbField->getValue(),
+                'default_use_native_db_enum config applies when field spec omits use_native_db_enum'
             );
         } finally {
-            DBSmartEnum::config()->remove('default_storage');
+            DBSmartEnum::config()->remove('default_use_native_db_enum');
         }
     }
 }

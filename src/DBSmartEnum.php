@@ -24,11 +24,11 @@ class DBSmartEnum extends DBEnum
     use Configurable;
 
     /**
-     * Global default logical storage when not overridden per field in constructor options.
+     * Global default for database-native ENUM vs scalar column when not overridden per field.
      *
      * @config
      */
-    private static string $default_storage = 'enum';
+    private static bool $default_use_native_db_enum = true;
 
     /**
      * Fully-qualified BackedEnum class name, when known.
@@ -43,9 +43,9 @@ class DBSmartEnum extends DBEnum
     protected string $backingType = 'string';
 
     /**
-     * Logical storage mode: `enum` (MySQL ENUM) or `scalar` (VARCHAR for strings, INT for ints).
+     * When true, persist as a database-native ENUM; when false, use VARCHAR (string-backed) or INT (int-backed).
      */
-    protected string $storage = 'enum';
+    protected bool $useNativeDbEnum = true;
 
     /**
      * VARCHAR column length when {@see getColumnType()} is `varchar`.
@@ -59,8 +59,8 @@ class DBSmartEnum extends DBEnum
      *                               arguments while inspecting types
      *                               (see {@see \SilverStripe\ORM\DataObject::dbObject()}).
      * @param \BackedEnum|int|string|null $default Backing scalar or enum case; null when omitted.
-     * @param array<string, mixed> $options Optional field options; `storage` (`enum`|`scalar`|`varchar`)
-     *                                      and `varchar_length` (int) are consumed by this class.
+     * @param array<string, mixed> $options Optional field options; `use_native_db_enum` (bool) and
+     *                                      `varchar_length` (int) are consumed by this class.
      *
      * @throws \RuntimeException When $enumClass is provided but cannot be resolved (e.g. autoload race in a
      *                           paratest worker fork) or is not a BackedEnum. Without this guard we would
@@ -103,14 +103,14 @@ class DBSmartEnum extends DBEnum
             );
         }
 
-        $this->storage = $this->resolveStorage($options);
+        $this->useNativeDbEnum = $this->resolveUseNativeDbEnum($options);
 
-        if ($this->storage === 'scalar' && $this->backingType === 'string') {
+        if (!$this->useNativeDbEnum && $this->backingType === 'string') {
             $this->varcharLength = $this->resolveVarcharLength($values ?? [], $options);
         }
 
         $parentOptions = $options;
-        unset($parentOptions['storage'], $parentOptions['varchar_length']);
+        unset($parentOptions['use_native_db_enum'], $parentOptions['varchar_length']);
 
         $resolvedDefault = $this->resolveDefault($this->enumClass, $values ?? [], $default);
 
@@ -132,43 +132,7 @@ class DBSmartEnum extends DBEnum
     }
 
     /**
-     * Backing scalar type of the PHP enum: `string` or `int`.
-     */
-    public function getBackingType(): string
-    {
-        return $this->backingType;
-    }
-
-    /**
-     * Logical storage mode for this field instance: `enum` or `scalar`.
-     */
-    public function getStorage(): string
-    {
-        return $this->storage;
-    }
-
-    /**
-     * Physical database column type: `enum`, `varchar`, or `int`.
-     */
-    public function getColumnType(): string
-    {
-        if ($this->storage === 'enum') {
-            return 'enum';
-        }
-
-        return $this->backingType === 'int' ? 'int' : 'varchar';
-    }
-
-    /**
-     * VARCHAR length when {@see getColumnType()} is `varchar`.
-     */
-    public function getVarcharLength(): int
-    {
-        return $this->varcharLength;
-    }
-
-    /**
-     * Ensure int-backed values are returned as ints (e.g. MySQL ENUM stringifies ints).
+     * Coerce stringified ints from database-native ENUM columns; scalar INT columns return ints already.
      *
      * @return mixed
      */
@@ -176,7 +140,12 @@ class DBSmartEnum extends DBEnum
     {
         $value = parent::getValue();
 
-        if ($this->backingType === 'int' && is_string($value) && is_numeric($value)) {
+        if (
+            $this->useNativeDbEnum
+            && $this->backingType === 'int'
+            && is_string($value)
+            && is_numeric($value)
+        ) {
             return (int) $value;
         }
 
@@ -205,30 +174,54 @@ class DBSmartEnum extends DBEnum
      */
     public function requireField()
     {
-        if ($this->storage === 'enum') {
-            parent::requireField();
-            return;
+        match ($this->getColumnType()) {
+            'enum' => parent::requireField(),
+            'int' => $this->requireIntField(),
+            'varchar' => $this->requireVarcharField(),
+            default => throw new \LogicException(
+                'DBSmartEnum: unexpected column type "' . $this->getColumnType() . '".'
+            ),
+        };
+    }
+
+    /**
+     * Physical database column type: `enum`, `varchar`, or `int`.
+     */
+    private function getColumnType(): string
+    {
+        if ($this->useNativeDbEnum) {
+            return 'enum';
         }
 
-        if ($this->backingType === 'int') {
-            $default = $this->getDefault();
+        return $this->backingType === 'int' ? 'int' : 'varchar';
+    }
 
-            $parts = [
-                'datatype' => 'int',
-                'precision' => 11,
-                'null' => 'not null',
-                'default' => $default !== null ? (int) $default : null,
-                'arrayValue' => $this->arrayValue,
-            ];
+    /**
+     * @return void
+     */
+    private function requireIntField(): void
+    {
+        $default = $this->getDefault();
 
-            DB::require_field($this->getTable(), $this->getName(), [
-                'type' => 'int',
-                'parts' => $parts,
-            ]);
+        $parts = [
+            'datatype' => 'int',
+            'precision' => 11,
+            'null' => 'not null',
+            'default' => $default !== null ? (int) $default : null,
+            'arrayValue' => $this->arrayValue,
+        ];
 
-            return;
-        }
+        DB::require_field($this->getTable(), $this->getName(), [
+            'type' => 'int',
+            'parts' => $parts,
+        ]);
+    }
 
+    /**
+     * @return void
+     */
+    private function requireVarcharField(): void
+    {
         $charset = Config::inst()->get(MySQLDatabase::class, 'charset');
         $collation = Config::inst()->get(MySQLDatabase::class, 'collation');
 
@@ -330,15 +323,27 @@ class DBSmartEnum extends DBEnum
     /**
      * @param array<string, mixed> $options
      */
-    private function resolveStorage(array $options): string
+    private function resolveUseNativeDbEnum(array $options): bool
     {
-        if (isset($options['storage'])) {
-            return $this->normaliseStorage((string) $options['storage']);
+        if (array_key_exists('use_native_db_enum', $options)) {
+            $value = $options['use_native_db_enum'];
+            if (!is_bool($value)) {
+                throw new \InvalidArgumentException(
+                    'DBSmartEnum: use_native_db_enum must be a boolean.'
+                );
+            }
+
+            return $value;
         }
 
-        $default = Config::inst()->get(static::class, 'default_storage') ?? 'enum';
+        $default = Config::inst()->get(static::class, 'default_use_native_db_enum') ?? true;
+        if (!is_bool($default)) {
+            throw new \InvalidArgumentException(
+                'DBSmartEnum: default_use_native_db_enum config must be a boolean.'
+            );
+        }
 
-        return $this->normaliseStorage((string) $default);
+        return $default;
     }
 
     /**
@@ -357,24 +362,6 @@ class DBSmartEnum extends DBEnum
         }
 
         return $this->clampVarcharLength(max(50, $maxLen));
-    }
-
-    private function normaliseStorage(string $storage): string
-    {
-        $storage = strtolower($storage);
-
-        if ($storage === 'varchar') {
-            return 'scalar';
-        }
-
-        if (!in_array($storage, ['enum', 'scalar'], true)) {
-            throw new \InvalidArgumentException(sprintf(
-                'DBSmartEnum: storage must be "enum", "scalar", or "varchar", "%s" given.',
-                $storage
-            ));
-        }
-
-        return $storage;
     }
 
     private function clampVarcharLength(int $length): int

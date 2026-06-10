@@ -66,8 +66,8 @@ class SmartEnumPersistenceTest extends SapphireTest
         );
         $this->assertSame(
             TestColor::Red,
-            $reloaded->getColorAsVarchar(),
-            'New records default ColorAsVarchar to the red enum case from the field spec'
+            $reloaded->getColorAsScalar(),
+            'New records default ColorAsScalar to the red enum case from the field spec'
         );
         $this->assertSame(
             TestPriority::Low,
@@ -76,8 +76,8 @@ class SmartEnumPersistenceTest extends SapphireTest
         );
         $this->assertSame(
             TestPriority::High,
-            $reloaded->getPriorityScalar(),
-            'New records default PriorityScalar to the high enum case from the int scalar field spec'
+            $reloaded->getPriorityAsInt(),
+            'New records default PriorityAsInt to the high enum case from the int scalar field spec'
         );
     }
 
@@ -102,8 +102,8 @@ class SmartEnumPersistenceTest extends SapphireTest
         return [
             'Color via typed setter' => ['Color', 'setter', TestColor::Blue],
             'Color via scalar property' => ['Color', 'property', TestColor::Blue],
-            'ColorAsVarchar via typed setter' => ['ColorAsVarchar', 'setter', TestColor::Red],
-            'ColorAsVarchar via scalar property' => ['ColorAsVarchar', 'property', TestColor::Red],
+            'ColorAsScalar via typed setter' => ['ColorAsScalar', 'setter', TestColor::Red],
+            'ColorAsScalar via scalar property' => ['ColorAsScalar', 'property', TestColor::Red],
         ];
     }
 
@@ -150,8 +150,8 @@ class SmartEnumPersistenceTest extends SapphireTest
         return [
             'Priority via typed setter' => ['Priority', 'setter', TestPriority::High, false],
             'Priority via scalar property' => ['Priority', 'property', TestPriority::High, false],
-            'PriorityScalar via typed setter' => ['PriorityScalar', 'setter', TestPriority::Low, true],
-            'PriorityScalar via scalar property' => ['PriorityScalar', 'property', TestPriority::Low, true],
+            'PriorityAsInt via typed setter' => ['PriorityAsInt', 'setter', TestPriority::Low, true],
+            'PriorityAsInt via scalar property' => ['PriorityAsInt', 'property', TestPriority::Low, true],
         ];
     }
 
