@@ -3,7 +3,6 @@
 namespace ArchiPro\Silverstripe\SmartEnum;
 
 use BackedEnum;
-use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\ORM\DataExtension;
 use SilverStripe\ORM\DataObjectSchema;
@@ -92,56 +91,34 @@ class SmartEnumDataExtension extends DataExtension
      */
     private function getSmartEnumFieldMap(): array
     {
-        static $cache = [];
-
-        $class = $this->getOwner()::class;
-
-        if (isset($cache[$class])) {
-            return $cache[$class];
-        }
-
         $map = [];
-        $fields = DataObjectSchema::create()->databaseFields($class, false);
+        $fields = DataObjectSchema::create()->databaseFields($this->getOwner()::class, false);
 
         foreach ($fields as $fieldName => $fieldSpec) {
-            if ($this->resolveDBSmartEnumClass($fieldSpec) !== null) {
+            if ($this->tryResolveSmartEnumFromSpec($fieldSpec, $fieldName) !== null) {
                 $map[$fieldName] = true;
             }
         }
-
-        $cache[$class] = $map;
 
         return $map;
     }
 
     /**
-     * Resolve the DBField class for a schema field spec without instantiating the field.
-     *
-     * @return class-string<DBSmartEnum>|null
+     * Instantiate the schema field spec and return a configured DBSmartEnum, or null when not applicable.
      */
-    private function resolveDBSmartEnumClass(string $fieldSpec): ?string
+    private function tryResolveSmartEnumFromSpec(string $fieldSpec, string $fieldName): ?DBSmartEnum
     {
-        if (class_exists($fieldSpec) && is_a($fieldSpec, DBSmartEnum::class, true)) {
-            return $fieldSpec;
-        }
-
-        $serviceName = $fieldSpec;
-        if (str_contains($fieldSpec, '(')) {
-            [$serviceName] = ClassInfo::parse_class_spec($fieldSpec);
-        }
-
-        if (class_exists($serviceName) && is_a($serviceName, DBSmartEnum::class, true)) {
-            return $serviceName;
-        }
-
-        $spec = Injector::inst()->getServiceSpec($serviceName);
-        if (!$spec || empty($spec['class'])) {
+        try {
+            $field = Injector::inst()->create($fieldSpec, $fieldName);
+        } catch (\Throwable) {
             return null;
         }
 
-        $class = $spec['class'];
+        if (!$field instanceof DBSmartEnum) {
+            return null;
+        }
 
-        return is_a($class, DBSmartEnum::class, true) ? $class : null;
+        return $field->getEnumClass() !== null ? $field : null;
     }
 
     private function getDBSmartEnumForField(string $field): DBSmartEnum

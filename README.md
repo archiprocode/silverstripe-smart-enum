@@ -81,6 +81,60 @@ The default must match a case on the enum. Invalid scalars and enum cases from a
 
 Unlike core `DBEnum`, integer defaults are **not** treated as list indices. Pass the actual backing value (or an enum case), not a positional index.
 
+## Optional: enum class in `$db` (advanced)
+
+By default this module only registers the `SmartEnum` Injector alias (see above). That is the **recommended** approach.
+
+You can opt in to a different syntax that uses the backed enum FQCN directly in `$db`:
+
+```php
+use My\Namespace\Priority;
+use My\Namespace\Status;
+use SilverStripe\ORM\DataObject;
+
+class MyRecord extends DataObject
+{
+    private static array $db = [
+        'Status' => Status::class,
+        'Priority' => Priority::class . '(1)',
+    ];
+}
+```
+
+This requires wrapping the Injector config locator at application bootstrap. The decorator composes with whatever locator is already installed (other modules can decorate the chain too).
+
+**Preferred (idempotent):**
+
+```php
+use ArchiPro\Silverstripe\SmartEnum\SmartEnumServiceConfigurationLocator;
+
+SmartEnumServiceConfigurationLocator::install();
+```
+
+**Explicit equivalent:**
+
+```php
+use ArchiPro\Silverstripe\SmartEnum\SmartEnumServiceConfigurationLocator;
+use SilverStripe\Core\Injector\Injector;
+
+$injector = Injector::inst();
+$injector->setConfigLocator(new SmartEnumServiceConfigurationLocator(
+    $injector->getConfigLocator()
+));
+```
+
+Copy [`docs/enum-class-field-spec.bootstrap.php`](docs/enum-class-field-spec.bootstrap.php) into your app (for example `app/_config/smart-enum-enum-class.php`). Do not add that file under this module’s `_config/` directory.
+
+### Behaviour and limitations
+
+- Explicit `SmartEnum("...")` specs and YAML Injector bindings still take precedence.
+- Defaults must be explicit in the field spec (`Status::class . '("PENDING")'`) or applied via the DataObject `$defaults` array at the ORM layer. This mode does **not** read `$defaults` when building the database column default.
+- Per-field `use_native_db_enum` / `varchar_length` options are not available via enum-class syntax; use `SmartEnum("...", default, [options])` for those.
+- Install once at bootstrap. `install()` is safe to call repeatedly; it does not double-wrap.
+- If multiple decorators are used, install SmartEnum as the **outermost** layer so it runs before inner locators.
+
+Both syntaxes can coexist when enum-class mode is enabled.
+
 ## MySQL ENUM vs scalar columns
 
 | `use_native_db_enum` | String-backed enum | Int-backed enum |

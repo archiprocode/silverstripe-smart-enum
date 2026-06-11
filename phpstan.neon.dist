@@ -7,3 +7,7 @@ parameters:
     -
       identifier: silverstan.injectable.useCreate
       path: tests/php/*
+    # Factory constructs DBSmartEnum directly; Injector::create() is not appropriate here.
+    -
+      identifier: silverstan.injectable.useCreate
+      path: src/DBSmartEnumFactory.php

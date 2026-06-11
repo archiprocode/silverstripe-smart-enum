@@ -84,9 +84,7 @@ class DBSmartEnum extends DBEnum
                 ));
             }
 
-            $enumReflection = new \ReflectionEnum($enumClass);
-
-            if (!$enumReflection->isBacked()) {
+            if (!BackedEnumDetection::isBackedEnumClass($enumClass)) {
                 throw new \RuntimeException(sprintf(
                     'DBSmartEnum: enum class "%s" is not a BackedEnum. '
                     . 'DBEnum requires scalar values to persist, so only BackedEnums are supported.',
@@ -94,6 +92,7 @@ class DBSmartEnum extends DBEnum
                 ));
             }
 
+            $enumReflection = new \ReflectionEnum($enumClass);
             $backingType = $enumReflection->getBackingType();
             $this->backingType = $backingType->getName();
 
