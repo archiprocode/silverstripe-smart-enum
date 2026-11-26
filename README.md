@@ -1,6 +1,6 @@
 # Silverstripe SmartEnum DBField
 
-Map a PHP 8.1+ `BackedEnum` to a Silverstripe `DataObject` database column. Values are derived from enum cases automatically. By default the column uses a database-native `ENUM` type (MySQL today); set `use_native_db_enum` to `false` to use a scalar column (`VARCHAR` for string-backed enums, `INT` for int-backed enums) when you need to avoid costly `ENUM` alters on large tables. This option refers to the database column type, not PHP `BackedEnum`.
+Map a PHP 8.1+ `BackedEnum` to a Silverstripe `DataObject` database column. Values are derived from enum cases automatically. By default string-backed enums use a database-native `ENUM` type (MySQL today); set `use_native_db_enum` to `false` to use a `VARCHAR` column when you need to avoid costly `ENUM` alters on large tables. This option refers to the database column type, not PHP `BackedEnum`. Int-backed enums are always stored in an `INT` column.
 
 CMS ModelAdmin and `DataObject` edit forms scaffold a `DropdownField` with the enum’s backing values (inherited from Silverstripe’s `DBEnum`).
 
@@ -139,10 +139,14 @@ Both syntaxes can coexist when enum-class mode is enabled.
 
 | `use_native_db_enum` | String-backed enum | Int-backed enum |
 |----------------------|-------------------|-----------------|
-| `true` (default) | MySQL `ENUM` | MySQL `ENUM` (values stored as quoted ints; coerced on read) |
+| `true` (default) | MySQL `ENUM` | `INT` |
 | `false` | `VARCHAR` | `INT` |
 
-Use `use_native_db_enum: true` for smaller schemas with values enforced by the database. Set `use_native_db_enum` to `false` on large tables where altering an `ENUM` is slow or risky, or when you want a native `INT` column for int-backed enums.
+Use `use_native_db_enum: true` for smaller schemas with values enforced by the database. Set `use_native_db_enum` to `false` on large tables where altering an `ENUM` is slow or risky.
+
+Int-backed enums never use a MySQL `ENUM`: MySQL compares integer operands against an `ENUM` column's 1-based member index rather than the member text, so an `ENUM` of backing numbers would make ORM filters such as `filter('Priority', 3)` match the wrong case. Valid values for int-backed enums are enforced in PHP when the field is set.
+
+Existing int-backed columns created as `ENUM` by earlier versions are converted to `INT` on the next `dev/build`. The column is first converted to text so that stored backing values are kept (a direct `ENUM` to `INT` alter would store member indexes instead); empty or `NULL` values become `0`. See [Migrating database ENUM → scalar columns on production](#migrating-database-enum--scalar-columns-on-production) before running this on large tables.
 
 Per-field override in the field spec options (4th argument):
 
@@ -153,7 +157,7 @@ Per-field override in the field spec options (4th argument):
 
 For string-backed enums with `use_native_db_enum: false`, `varchar_length` is optional; when omitted, the length is `max(50, longest backing value length)` capped at 255.
 
-Int-backed enums with `use_native_db_enum: true` return stringified values from MySQL. `DBSmartEnum` coerces numeric strings back to `int` at the field boundary (for example when reading via `dbObject()` or typed accessors).
+Int-backed enums with `use_native_db_enum: true` coerce numeric strings to `int` at the field boundary (for example when reading via `dbObject()` or typed accessors).
 
 ### YAML / site-wide default
 
@@ -223,7 +227,7 @@ No extra configuration is required. `scaffoldFormField()` returns a `DropdownFie
 
 ## Migrating database ENUM → scalar columns on production
 
-Flipping `use_native_db_enum` from `true` to `false` on a live, large table is an operational task. `dev/build` may issue `ALTER TABLE` statements that lock or rebuild the table for a long time. Plan a manual migration and maintenance window; do not rely on a casual `dev/build` on production for column-type changes.
+Flipping `use_native_db_enum` from `true` to `false` on a live, large table, or upgrading to a version that stores int-backed enums as `INT`, is an operational task. `dev/build` may issue `ALTER TABLE` statements that lock or rebuild the table for a long time. Plan a manual migration and maintenance window; do not rely on a casual `dev/build` on production for column-type changes.
 
 ## Running tests
 
