@@ -25,6 +25,7 @@ class DBSmartEnum extends DBEnum
 
     /**
      * Global default for database-native ENUM vs scalar column when not overridden per field.
+     * Only applies to string-backed enums; int-backed enums are always stored in an INT column.
      *
      * @config
      */
@@ -43,7 +44,8 @@ class DBSmartEnum extends DBEnum
     protected string $backingType = 'string';
 
     /**
-     * When true, persist as a database-native ENUM; when false, use VARCHAR (string-backed) or INT (int-backed).
+     * When true, persist string-backed enums as a database-native ENUM; when false, use VARCHAR.
+     * Int-backed enums always use INT regardless of this flag.
      */
     protected bool $useNativeDbEnum = true;
 
@@ -131,7 +133,7 @@ class DBSmartEnum extends DBEnum
     }
 
     /**
-     * Coerce stringified ints from database-native ENUM columns; scalar INT columns return ints already.
+     * Coerce stringified ints to the int backing scalar when `use_native_db_enum` is true.
      *
      * @return mixed
      */
@@ -184,15 +186,17 @@ class DBSmartEnum extends DBEnum
     }
 
     /**
-     * Physical database column type: `enum`, `varchar`, or `int`.
+     * Physical database column type: `enum` or `varchar` for string-backed enums, `int` for int-backed enums.
      */
     private function getColumnType(): string
     {
-        if ($this->useNativeDbEnum) {
-            return 'enum';
+        // A MySQL ENUM compares integer operands against the 1-based member index, so an ENUM of backing
+        // numbers would let integer filters match the wrong case. Int-backed enums always use INT.
+        if ($this->backingType === 'int') {
+            return 'int';
         }
 
-        return $this->backingType === 'int' ? 'int' : 'varchar';
+        return $this->useNativeDbEnum ? 'enum' : 'varchar';
     }
 
     /**
@@ -200,6 +204,8 @@ class DBSmartEnum extends DBEnum
      */
     private function requireIntField(): void
     {
+        $this->convertNativeEnumColumnToText();
+
         $default = $this->getDefault();
 
         $parts = [
@@ -214,6 +220,54 @@ class DBSmartEnum extends DBEnum
             'type' => 'int',
             'parts' => $parts,
         ]);
+    }
+
+    /**
+     * MySQL converts an ENUM column to INT by member index rather than member text (ENUM('1','3') holding
+     * '3' becomes 2), so an existing native ENUM column must pass through a text column before the INT
+     * alteration queued by {@see requireIntField()} runs.
+     */
+    private function convertNativeEnumColumnToText(): void
+    {
+        $table = $this->getTable();
+        $name = $this->getName();
+        $schema = DB::get_schema();
+
+        if (!$table || !$name || !$schema || !$schema->hasTable($table)) {
+            return;
+        }
+
+        $existing = $schema->fieldList($table)[$name] ?? null;
+        if (is_array($existing)) {
+            $existing = $existing['data_type'] ?? null;
+        }
+
+        if (!is_string($existing) || !preg_match('/^\s*(enum|set)\s*\(/i', $existing)) {
+            return;
+        }
+
+        $schema->alterField($table, $name, $schema->varchar([
+            'precision' => 255,
+            'default' => null,
+        ]));
+
+        $conn = DB::get_conn();
+        $column = $conn->escapeIdentifier($name);
+        DB::prepared_query(
+            sprintf(
+                'UPDATE %s SET %s = ? WHERE %s IS NULL OR %s = ?',
+                $conn->escapeIdentifier($table),
+                $column,
+                $column,
+                $column
+            ),
+            ['0', '']
+        );
+
+        DB::alteration_message(
+            sprintf('Field %s.%s: converted from %s to text before INT conversion', $table, $name, $existing),
+            'changed'
+        );
     }
 
     /**
